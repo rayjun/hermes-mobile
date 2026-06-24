@@ -31,7 +31,7 @@ This repo now contains:
 
 - `backend_plugin/hermes_mobile/` — FastAPI mock Mobile Gateway adapter with status, approvals, approval decisions, session timeline, and WebSocket event stream.
 - `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, and shared Compose components for section headers, inbox rows, approval cards, and the command bar.
-- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox mock using shared components.
+- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` mock gateway data with an offline sample fallback.
 - `tests/` — pytest coverage for the mock gateway API.
 
 Run KMP shared build/tests:
@@ -46,6 +46,14 @@ Run Android debug build:
 # Requires local.properties with sdk.dir=/path/to/android-sdk or ANDROID_HOME set
 ./gradlew :apps:androidApp:assembleDebug --no-daemon
 ```
+
+The Android debug shell connects to the mock gateway at `http://10.0.2.2:8765` when run in an emulator. Start the local mock gateway first:
+
+```bash
+python3 -m uvicorn backend_plugin.hermes_mobile.server:app --host 127.0.0.1 --port 8765
+```
+
+If the gateway is unavailable, the app renders a sample approval fallback instead of a blank screen.
 
 Run backend tests:
 

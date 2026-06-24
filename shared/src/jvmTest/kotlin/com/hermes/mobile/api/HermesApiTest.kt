@@ -20,7 +20,7 @@ class HermesApiTest {
     fun fetchesPendingApprovals() = runTest {
         val api = HermesApi("http://test", mockClient(approvalsJson))
 
-        val approvals = api.pendingApprovals().approvals
+        val approvals = api.pendingApprovals()
 
         assertEquals(1, approvals.size)
         assertEquals("appr_mock_git_push", approvals.first().id)

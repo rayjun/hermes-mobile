@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:theme="@style/HermesTheme"
         android:label="Hermes Mobile"
         android:supportsRtl="true">

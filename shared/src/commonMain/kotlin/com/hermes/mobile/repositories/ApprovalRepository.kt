@@ -7,7 +7,7 @@ import com.hermes.mobile.models.ApprovalDecision
 class ApprovalRepository(
     private val api: HermesApi,
 ) {
-    suspend fun pending(): List<Approval> = api.pendingApprovals().approvals
+    suspend fun pending(): List<Approval> = api.pendingApprovals()
 
     suspend fun detail(id: String): Approval = api.approval(id)
 

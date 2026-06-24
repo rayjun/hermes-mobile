@@ -32,4 +32,5 @@ dependencies {
     implementation(compose.runtime)
     implementation(compose.foundation)
     implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("io.ktor:ktor-client-okhttp:3.1.3")
 }

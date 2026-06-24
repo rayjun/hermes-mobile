@@ -14,8 +14,8 @@ data class InboxState(
     companion object {
         fun from(
             approvals: List<Approval>,
-            runningSessions: List<RunningSessionItem>,
-            recentEvents: List<RecentEventItem>,
+            runningSessions: List<RunningSessionItem> = emptyList(),
+            recentEvents: List<RecentEventItem> = emptyList(),
         ): InboxState {
             val sections = buildList {
                 val approvalItems = approvals.map { approval ->
