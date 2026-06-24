@@ -1,14 +1,39 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+from typing import Protocol
+
 from fastapi import FastAPI, HTTPException, Query, WebSocket
 
-from .models import ApprovalDecision, ApprovalStatus, GoalRequest, GoalResponse, StatusResponse
+from .models import Approval, ApprovalDecision, ApprovalStatus, GoalRequest, GoalResponse, SessionSummary, SessionTimeline, StatusResponse
+from .real_store import StateDbMobileStore
 from .storage import MockMobileStore
 
 
-def create_app() -> FastAPI:
+class MobileStore(Protocol):
+    def list_sessions(self, limit: int = 50) -> list[SessionSummary]: ...
+    def list_approvals(self, status: str | None = None) -> list[Approval]: ...
+    def get_approval(self, approval_id: str) -> Approval | None: ...
+    def resolve_approval(self, approval_id: str, status: ApprovalStatus) -> Approval | None: ...
+    def create_session_from_goal(self, goal: str) -> tuple[SessionSummary, SessionTimeline]: ...
+    def append_goal(self, session_id: str, goal: str) -> tuple[SessionSummary, SessionTimeline] | None: ...
+    def get_timeline(self, session_id: str) -> SessionTimeline | None: ...
+
+
+def create_default_store() -> MobileStore:
+    state_db = os.getenv("HERMES_MOBILE_STATE_DB")
+    if state_db:
+        return StateDbMobileStore(state_db)
+    default_state = Path.home() / ".hermes" / "state.db"
+    if os.getenv("HERMES_MOBILE_USE_STATE_DB") == "1" and default_state.exists():
+        return StateDbMobileStore(default_state)
+    return MockMobileStore()
+
+
+def create_app(store: MobileStore | None = None) -> FastAPI:
     app = FastAPI(title="Hermes Mobile Gateway Mock", version="0.1.0")
-    store = MockMobileStore()
+    store = store or create_default_store()
 
     @app.get("/mobile/v1/status", response_model=StatusResponse)
     def status() -> StatusResponse:
@@ -55,6 +80,10 @@ def create_app() -> FastAPI:
         if not approval:
             raise HTTPException(status_code=404, detail="approval_not_found")
         return approval
+
+    @app.get("/mobile/v1/sessions")
+    def list_sessions() -> dict[str, object]:
+        return {"sessions": store.list_sessions()}
 
     @app.post("/mobile/v1/sessions", response_model=GoalResponse)
     def create_session(request: GoalRequest) -> GoalResponse:

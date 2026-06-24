@@ -36,6 +36,17 @@ class HermesApiTest {
         assertEquals("appr_mock_git_push", approval.id)
         assertEquals(ApprovalStatus.Approved, approval.status)
     }
+
+    @Test
+    fun fetchesSessionList() = runTest {
+        val api = HermesApi("http://test", mockClient(sessionsJson))
+
+        val sessions = api.sessions()
+
+        assertEquals(1, sessions.size)
+        assertEquals("sess_real", sessions.first().id)
+        assertEquals("Ship mobile adapter", sessions.first().title)
+    }
 }
 
 private fun mockClient(responseBody: String): HttpClient = HttpClient(MockEngine) {
@@ -89,5 +100,19 @@ private const val approvedApprovalJson = """
   "details": {"repo": "rayjun/hermes-agent"},
   "actions": ["approve", "deny", "ask"],
   "created_at": "2026-06-24T10:00:00Z"
+}
+"""
+
+private const val sessionsJson = """
+{
+  "sessions": [
+    {
+      "id": "sess_real",
+      "title": "Ship mobile adapter",
+      "status": "running",
+      "created_at": "2026-06-24T10:00:00Z",
+      "updated_at": "2026-06-24T10:01:00Z"
+    }
+  ]
 }
 """

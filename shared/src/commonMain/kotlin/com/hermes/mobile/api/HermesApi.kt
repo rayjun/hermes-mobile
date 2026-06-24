@@ -7,6 +7,8 @@ import com.hermes.mobile.models.GoalRequest
 import com.hermes.mobile.models.GoalResponse
 import com.hermes.mobile.models.NodeStatus
 import com.hermes.mobile.models.SessionTimeline
+import com.hermes.mobile.models.SessionSummary
+import com.hermes.mobile.models.SessionsResponse
 import com.hermes.mobile.ui.ApprovalActionGateway
 import com.hermes.mobile.ui.GoalGateway
 import com.hermes.mobile.ui.InboxGateway
@@ -47,6 +49,11 @@ class HermesApi(
             contentType(ContentType.Application.Json)
             setBody(decision)
         }.body()
+
+    suspend fun sessionsResponse(): SessionsResponse =
+        client.get("$baseUrl/mobile/v1/sessions").body()
+
+    suspend fun sessions(): List<SessionSummary> = sessionsResponse().sessions
 
     override suspend fun appendGoal(sessionId: String, request: GoalRequest): GoalResponse =
         client.post("$baseUrl/mobile/v1/sessions/$sessionId/goals") {

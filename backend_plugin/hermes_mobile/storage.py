@@ -99,6 +99,10 @@ class MockMobileStore:
             )
         }
 
+    def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
+        sessions = sorted(self.sessions.values(), key=lambda session: session.updated_at, reverse=True)
+        return deepcopy(sessions[:limit])
+
     def list_approvals(self, status: str | None = None) -> list[Approval]:
         approvals = list(self.approvals.values())
         if status:
