@@ -12,6 +12,7 @@ import com.hermes.mobile.models.SessionsResponse
 import com.hermes.mobile.ui.ApprovalActionGateway
 import com.hermes.mobile.ui.GoalGateway
 import com.hermes.mobile.ui.InboxGateway
+import com.hermes.mobile.ui.SessionsGateway
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -27,7 +28,7 @@ import kotlinx.serialization.json.Json
 class HermesApi(
     private val baseUrl: String,
     private val client: HttpClient = defaultHttpClient(),
-) : InboxGateway, ApprovalActionGateway, GoalGateway {
+) : InboxGateway, ApprovalActionGateway, GoalGateway, SessionsGateway {
     override suspend fun status(): NodeStatus = client.get("$baseUrl/mobile/v1/status").body()
 
     suspend fun pendingApprovalsResponse(): ApprovalsResponse =
@@ -53,7 +54,7 @@ class HermesApi(
     suspend fun sessionsResponse(): SessionsResponse =
         client.get("$baseUrl/mobile/v1/sessions").body()
 
-    suspend fun sessions(): List<SessionSummary> = sessionsResponse().sessions
+    override suspend fun sessions(): List<SessionSummary> = sessionsResponse().sessions
 
     override suspend fun appendGoal(sessionId: String, request: GoalRequest): GoalResponse =
         client.post("$baseUrl/mobile/v1/sessions/$sessionId/goals") {
@@ -67,7 +68,7 @@ class HermesApi(
             setBody(request)
         }.body()
 
-    suspend fun sessionTimeline(sessionId: String): SessionTimeline =
+    override suspend fun sessionTimeline(sessionId: String): SessionTimeline =
         client.get("$baseUrl/mobile/v1/sessions/$sessionId/timeline").body()
 }
 

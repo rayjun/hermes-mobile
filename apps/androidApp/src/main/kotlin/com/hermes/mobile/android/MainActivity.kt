@@ -7,8 +7,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
@@ -29,12 +31,15 @@ import com.hermes.mobile.api.HermesApi
 import com.hermes.mobile.api.HermesEventStream
 import com.hermes.mobile.api.defaultHttpClient
 import com.hermes.mobile.models.Approval
+import com.hermes.mobile.models.SessionSummary
 import com.hermes.mobile.ui.ApprovalActionController
 import com.hermes.mobile.ui.GoalController
 import com.hermes.mobile.ui.InboxLoadState
 import com.hermes.mobile.ui.SessionDetailController
 import com.hermes.mobile.ui.SessionDetailState
 import com.hermes.mobile.ui.SessionLiveEventController
+import com.hermes.mobile.ui.SessionsLoadState
+import com.hermes.mobile.ui.SessionsLoader
 import com.hermes.mobile.ui.TimelineRowKind
 import com.hermes.mobile.ui.InboxLoader
 import com.hermes.mobile.ui.components.CommandBarState
@@ -58,10 +63,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             HermesTheme {
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
+                var sessionsState by remember { mutableStateOf<SessionsLoadState>(SessionsLoadState.Loading) }
+                var selectedTab by remember { mutableStateOf(MobileTab.Inbox) }
                 var commandText by remember { mutableStateOf("") }
                 var sessionDetail by remember { mutableStateOf<SessionDetailState?>(null) }
                 val api = remember { HermesApi(DefaultGatewayBaseUrl) }
                 val loader = remember { InboxLoader(api) }
+                val sessionsLoader = remember { SessionsLoader(api) }
                 val actionController = remember { ApprovalActionController(api) }
                 val goalController = remember { GoalController(api) }
                 val sessionController = remember { SessionDetailController(goalController) }
@@ -70,6 +78,7 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) {
                     state = loader.load()
+                    sessionsState = sessionsLoader.load()
                 }
                 LaunchedEffect(sessionDetail?.timeline?.sessionId) {
                     val activeDetail = sessionDetail ?: return@LaunchedEffect
@@ -81,6 +90,8 @@ class MainActivity : ComponentActivity() {
                 }
                 HermesMobileApp(
                     state = state,
+                    sessionsState = sessionsState,
+                    selectedTab = selectedTab,
                     sessionDetail = sessionDetail,
                     commandText = commandText,
                     onCommandTextChange = { commandText = it },
@@ -88,11 +99,29 @@ class MainActivity : ComponentActivity() {
                         val goal = commandText
                         scope.launch {
                             sessionDetail = sessionController.submitGoal(sessionDetail, goal)
+                            selectedTab = MobileTab.Sessions
                             commandText = ""
                             state = loader.load()
+                            sessionsState = sessionsLoader.load()
                         }
                     },
-                    onBackToInbox = { sessionDetail = null },
+                    onBackToInbox = {
+                        sessionDetail = null
+                        selectedTab = MobileTab.Inbox
+                    },
+                    onSelectTab = { tab ->
+                        selectedTab = tab
+                        sessionDetail = null
+                        if (tab == MobileTab.Sessions) {
+                            scope.launch { sessionsState = sessionsLoader.load() }
+                        }
+                    },
+                    onOpenSession = { session ->
+                        scope.launch {
+                            sessionDetail = sessionsLoader.openSession(session.id)
+                            selectedTab = MobileTab.Sessions
+                        }
+                    },
                     onApprove = { approval ->
                         scope.launch {
                             actionController.approve(approval, biometricVerified = true)
@@ -114,11 +143,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HermesMobileApp(
     state: InboxLoadState,
+    sessionsState: SessionsLoadState,
+    selectedTab: MobileTab,
     sessionDetail: SessionDetailState?,
     commandText: String,
     onCommandTextChange: (String) -> Unit,
     onSendGoal: () -> Unit,
     onBackToInbox: () -> Unit,
+    onSelectTab: (MobileTab) -> Unit,
+    onOpenSession: (SessionSummary) -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
 ) {
@@ -137,16 +170,26 @@ fun HermesMobileApp(
                 onSendGoal = onSendGoal,
                 onBackToInbox = onBackToInbox,
             )
-        } else when (state) {
-            InboxLoadState.Loading -> LoadingInbox(commandText, onCommandTextChange, onSendGoal)
-            is InboxLoadState.Ready -> ReadyInbox(
-                state = state,
-                commandText = commandText,
-                onCommandTextChange = onCommandTextChange,
-                onSendGoal = onSendGoal,
-                onBackToInbox = onBackToInbox,
-                onApprove = onApprove,
-                onDeny = onDeny,
+        } else when (selectedTab) {
+            MobileTab.Inbox -> when (state) {
+                InboxLoadState.Loading -> LoadingInbox(commandText, onCommandTextChange, onSendGoal)
+                is InboxLoadState.Ready -> ReadyInbox(
+                    state = state,
+                    commandText = commandText,
+                    onCommandTextChange = onCommandTextChange,
+                    onSendGoal = onSendGoal,
+                    onBackToInbox = onBackToInbox,
+                    onSelectTab = onSelectTab,
+                    onOpenSession = onOpenSession,
+                    onApprove = onApprove,
+                    onDeny = onDeny,
+                )
+            }
+            MobileTab.Sessions -> SessionsScreen(
+                state = sessionsState,
+                selectedTab = selectedTab,
+                onSelectTab = onSelectTab,
+                onOpenSession = onOpenSession,
             )
         }
     }
@@ -181,6 +224,8 @@ private fun ColumnScope.ReadyInbox(
     onCommandTextChange: (String) -> Unit,
     onSendGoal: () -> Unit,
     onBackToInbox: () -> Unit,
+    onSelectTab: (MobileTab) -> Unit,
+    onOpenSession: (SessionSummary) -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
 ) {
@@ -210,12 +255,80 @@ private fun ColumnScope.ReadyInbox(
     }
 
     Spacer(Modifier.weight(1f))
+    BottomNav(selected = MobileTab.Inbox, onSelectTab = onSelectTab)
     HermesCommandBar(
         state = CommandBarState(text = commandText, canSend = commandText.isNotBlank()),
         onTextChange = onCommandTextChange,
         onSend = onSendGoal,
     )
     Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun ColumnScope.SessionsScreen(
+    state: SessionsLoadState,
+    selectedTab: MobileTab,
+    onSelectTab: (MobileTab) -> Unit,
+    onOpenSession: (SessionSummary) -> Unit,
+) {
+    TopBar(nodeName = "Hermes", nodeStatus = "online")
+    HermesSectionHeader(SectionHeaderState("SESSIONS"))
+    when (state) {
+        SessionsLoadState.Loading -> BasicText(
+            text = "Loading sessions…",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 13.sp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        )
+        is SessionsLoadState.Ready -> {
+            state.notice?.let { notice ->
+                BasicText(
+                    text = notice,
+                    style = TextStyle(color = color(HermesColors.Warning), fontSize = 11.sp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            state.sessions.forEach { session ->
+                HermesInboxItem(
+                    InboxItemState(
+                        title = session.title,
+                        subtitle = "${session.status.name.lowercase()} · ${session.updatedAt}",
+                        kind = if (session.status.name == "Completed") InboxItemKind.Result else InboxItemKind.Running,
+                    ),
+                    modifier = Modifier.clickable { onOpenSession(session) },
+                )
+            }
+        }
+    }
+    Spacer(Modifier.weight(1f))
+    BottomNav(selected = selectedTab, onSelectTab = onSelectTab)
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun BottomNav(
+    selected: MobileTab,
+    onSelectTab: (MobileTab) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        BasicText(
+            text = if (selected == MobileTab.Inbox) "● Inbox" else "○ Inbox",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onSelectTab(MobileTab.Inbox) },
+        )
+        BasicText(
+            text = if (selected == MobileTab.Sessions) "● Sessions" else "○ Sessions",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onSelectTab(MobileTab.Sessions) },
+        )
+    }
 }
 
 @Composable
@@ -276,6 +389,11 @@ private fun TopBar(nodeName: String, nodeStatus: String) {
         ),
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
     )
+}
+
+enum class MobileTab {
+    Inbox,
+    Sessions,
 }
 
 private fun color(argb: Long): Color = Color(argb.toULong())

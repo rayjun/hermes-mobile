@@ -30,8 +30,8 @@ It is not a chatbot UI and not a mobile runtime for running agents on-device. Th
 This repo now contains:
 
 - `backend_plugin/hermes_mobile/` — FastAPI Mobile Gateway adapter with mock mode plus read-only Hermes `state.db` mode for real session listing/timeline inspection; includes status, approvals, approval decisions, goal/session creation, session timeline, and WebSocket event stream including session timeline updates.
-- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, WebSocket event stream, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, approval action controller, goal/session controller, session detail controller, live session event reducer, and shared Compose components for section headers, inbox rows, approval cards, approve/deny actions, and editable command bar.
-- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` mock gateway data with an offline sample fallback, approve/deny actions, and a `Start with a goal` command bar that opens a session detail timeline, continues the same session on follow-up goals, and applies live WebSocket timeline updates.
+- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, WebSocket event stream, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, approval action controller, goal/session controller, session detail controller, sessions loader, live session event reducer, and shared Compose components for section headers, inbox rows, approval cards, approve/deny actions, and editable command bar.
+- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` gateway data with an offline sample fallback, approve/deny actions, a Sessions tab backed by `/mobile/v1/sessions`, and a `Start with a goal` command bar that opens a session detail timeline, continues the same session on follow-up goals, and applies live WebSocket timeline updates.
 - `tests/` — pytest coverage for the mock gateway API.
 
 Run KMP shared build/tests:
