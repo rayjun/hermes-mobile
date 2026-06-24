@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "hermes-mobile"
 include(":shared")
+include(":apps:androidApp")

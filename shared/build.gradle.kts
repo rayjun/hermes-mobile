@@ -3,9 +3,11 @@ plugins {
     kotlin("plugin.serialization")
     kotlin("plugin.compose")
     id("org.jetbrains.compose")
+    id("com.android.library")
 }
 
 kotlin {
+    androidTarget()
     jvm()
     iosX64()
     iosArm64()
@@ -29,5 +31,19 @@ kotlin {
             implementation("io.ktor:ktor-client-mock:3.1.3")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
+    }
+}
+
+android {
+    namespace = "com.hermes.mobile.shared"
+    compileSdk = 35
+
+    defaultConfig {
+        minSdk = 26
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
