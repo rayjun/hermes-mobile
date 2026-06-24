@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -29,7 +30,8 @@ import com.hermes.mobile.models.Approval
 import com.hermes.mobile.ui.ApprovalActionController
 import com.hermes.mobile.ui.GoalController
 import com.hermes.mobile.ui.InboxLoadState
-import com.hermes.mobile.ui.SessionTimelineState
+import com.hermes.mobile.ui.SessionDetailController
+import com.hermes.mobile.ui.SessionDetailState
 import com.hermes.mobile.ui.TimelineRowKind
 import com.hermes.mobile.ui.InboxLoader
 import com.hermes.mobile.ui.components.CommandBarState
@@ -53,28 +55,30 @@ class MainActivity : ComponentActivity() {
             HermesTheme {
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
                 var commandText by remember { mutableStateOf("") }
-                var timelineState by remember { mutableStateOf<SessionTimelineState?>(null) }
+                var sessionDetail by remember { mutableStateOf<SessionDetailState?>(null) }
                 val api = remember { HermesApi(DefaultGatewayBaseUrl) }
                 val loader = remember { InboxLoader(api) }
                 val actionController = remember { ApprovalActionController(api) }
                 val goalController = remember { GoalController(api) }
+                val sessionController = remember { SessionDetailController(goalController) }
                 val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) {
                     state = loader.load()
                 }
                 HermesMobileApp(
                     state = state,
-                    timelineState = timelineState,
+                    sessionDetail = sessionDetail,
                     commandText = commandText,
                     onCommandTextChange = { commandText = it },
                     onSendGoal = {
                         val goal = commandText
                         scope.launch {
-                            timelineState = goalController.startGoal(goal)
+                            sessionDetail = sessionController.submitGoal(sessionDetail, goal)
                             commandText = ""
                             state = loader.load()
                         }
                     },
+                    onBackToInbox = { sessionDetail = null },
                     onApprove = { approval ->
                         scope.launch {
                             actionController.approve(approval, biometricVerified = true)
@@ -96,10 +100,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HermesMobileApp(
     state: InboxLoadState,
-    timelineState: SessionTimelineState?,
+    sessionDetail: SessionDetailState?,
     commandText: String,
     onCommandTextChange: (String) -> Unit,
     onSendGoal: () -> Unit,
+    onBackToInbox: () -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
 ) {
@@ -109,14 +114,23 @@ fun HermesMobileApp(
             .background(color(HermesColors.Background))
             .padding(top = 20.dp),
     ) {
-        when (state) {
-            InboxLoadState.Loading -> LoadingInbox(commandText, onCommandTextChange, onSendGoal)
-            is InboxLoadState.Ready -> ReadyInbox(
-                state = state,
-                timelineState = timelineState,
+        val detail = sessionDetail
+        if (detail != null) {
+            SessionDetailScreen(
+                detail = detail,
                 commandText = commandText,
                 onCommandTextChange = onCommandTextChange,
                 onSendGoal = onSendGoal,
+                onBackToInbox = onBackToInbox,
+            )
+        } else when (state) {
+            InboxLoadState.Loading -> LoadingInbox(commandText, onCommandTextChange, onSendGoal)
+            is InboxLoadState.Ready -> ReadyInbox(
+                state = state,
+                commandText = commandText,
+                onCommandTextChange = onCommandTextChange,
+                onSendGoal = onSendGoal,
+                onBackToInbox = onBackToInbox,
                 onApprove = onApprove,
                 onDeny = onDeny,
             )
@@ -149,10 +163,10 @@ private fun ColumnScope.LoadingInbox(
 @Composable
 private fun ColumnScope.ReadyInbox(
     state: InboxLoadState.Ready,
-    timelineState: SessionTimelineState?,
     commandText: String,
     onCommandTextChange: (String) -> Unit,
     onSendGoal: () -> Unit,
+    onBackToInbox: () -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
 ) {
@@ -163,23 +177,6 @@ private fun ColumnScope.ReadyInbox(
             style = TextStyle(color = color(HermesColors.Warning), fontSize = 11.sp),
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
-    }
-
-    timelineState?.let { timeline ->
-        HermesSectionHeader(SectionHeaderState("SESSION", timeline.rows.size))
-        timeline.rows.forEach { row ->
-            HermesInboxItem(
-                InboxItemState(
-                    title = row.title,
-                    subtitle = row.subtitle,
-                    kind = when (row.kind) {
-                        TimelineRowKind.UserGoal -> InboxItemKind.Running
-                        TimelineRowKind.Thinking -> InboxItemKind.Running
-                        TimelineRowKind.Result -> InboxItemKind.Result
-                    },
-                )
-            )
-        }
     }
 
     state.inbox.sections.forEach { section ->
@@ -201,6 +198,52 @@ private fun ColumnScope.ReadyInbox(
     Spacer(Modifier.weight(1f))
     HermesCommandBar(
         state = CommandBarState(text = commandText, canSend = commandText.isNotBlank()),
+        onTextChange = onCommandTextChange,
+        onSend = onSendGoal,
+    )
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun ColumnScope.SessionDetailScreen(
+    detail: SessionDetailState,
+    commandText: String,
+    onCommandTextChange: (String) -> Unit,
+    onSendGoal: () -> Unit,
+    onBackToInbox: () -> Unit,
+) {
+    BasicText(
+        text = "‹ Inbox                         ${detail.timeline.title}",
+        style = TextStyle(
+            color = color(HermesColors.TextPrimary),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        ),
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .clickable(onClick = onBackToInbox),
+    )
+    HermesSectionHeader(SectionHeaderState("SESSION", detail.timeline.rows.size))
+    detail.timeline.rows.forEach { row ->
+        HermesInboxItem(
+            InboxItemState(
+                title = row.title,
+                subtitle = row.subtitle,
+                kind = when (row.kind) {
+                    TimelineRowKind.UserGoal -> InboxItemKind.Running
+                    TimelineRowKind.Thinking -> InboxItemKind.Running
+                    TimelineRowKind.Result -> InboxItemKind.Result
+                },
+            )
+        )
+    }
+    Spacer(Modifier.weight(1f))
+    HermesCommandBar(
+        state = CommandBarState(
+            placeholder = "Continue this session",
+            text = commandText,
+            canSend = commandText.isNotBlank(),
+        ),
         onTextChange = onCommandTextChange,
         onSend = onSendGoal,
     )
