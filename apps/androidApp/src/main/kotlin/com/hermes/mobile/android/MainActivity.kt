@@ -27,13 +27,18 @@ import androidx.compose.ui.unit.sp
 import com.hermes.mobile.api.HermesApi
 import com.hermes.mobile.models.Approval
 import com.hermes.mobile.ui.ApprovalActionController
+import com.hermes.mobile.ui.GoalController
 import com.hermes.mobile.ui.InboxLoadState
+import com.hermes.mobile.ui.SessionTimelineState
+import com.hermes.mobile.ui.TimelineRowKind
 import com.hermes.mobile.ui.InboxLoader
 import com.hermes.mobile.ui.components.CommandBarState
 import com.hermes.mobile.ui.components.HermesApprovalCard
 import com.hermes.mobile.ui.components.HermesCommandBar
 import com.hermes.mobile.ui.components.HermesInboxItem
 import com.hermes.mobile.ui.components.HermesSectionHeader
+import com.hermes.mobile.ui.components.InboxItemKind
+import com.hermes.mobile.ui.components.InboxItemState
 import com.hermes.mobile.ui.components.SectionHeaderState
 import com.hermes.mobile.ui.theme.HermesColors
 import com.hermes.mobile.ui.theme.HermesTheme
@@ -47,15 +52,29 @@ class MainActivity : ComponentActivity() {
         setContent {
             HermesTheme {
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
+                var commandText by remember { mutableStateOf("") }
+                var timelineState by remember { mutableStateOf<SessionTimelineState?>(null) }
                 val api = remember { HermesApi(DefaultGatewayBaseUrl) }
                 val loader = remember { InboxLoader(api) }
                 val actionController = remember { ApprovalActionController(api) }
+                val goalController = remember { GoalController(api) }
                 val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) {
                     state = loader.load()
                 }
                 HermesMobileApp(
                     state = state,
+                    timelineState = timelineState,
+                    commandText = commandText,
+                    onCommandTextChange = { commandText = it },
+                    onSendGoal = {
+                        val goal = commandText
+                        scope.launch {
+                            timelineState = goalController.startGoal(goal)
+                            commandText = ""
+                            state = loader.load()
+                        }
+                    },
                     onApprove = { approval ->
                         scope.launch {
                             actionController.approve(approval, biometricVerified = true)
@@ -77,6 +96,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HermesMobileApp(
     state: InboxLoadState,
+    timelineState: SessionTimelineState?,
+    commandText: String,
+    onCommandTextChange: (String) -> Unit,
+    onSendGoal: () -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
 ) {
@@ -87,14 +110,26 @@ fun HermesMobileApp(
             .padding(top = 20.dp),
     ) {
         when (state) {
-            InboxLoadState.Loading -> LoadingInbox()
-            is InboxLoadState.Ready -> ReadyInbox(state, onApprove, onDeny)
+            InboxLoadState.Loading -> LoadingInbox(commandText, onCommandTextChange, onSendGoal)
+            is InboxLoadState.Ready -> ReadyInbox(
+                state = state,
+                timelineState = timelineState,
+                commandText = commandText,
+                onCommandTextChange = onCommandTextChange,
+                onSendGoal = onSendGoal,
+                onApprove = onApprove,
+                onDeny = onDeny,
+            )
         }
     }
 }
 
 @Composable
-private fun ColumnScope.LoadingInbox() {
+private fun ColumnScope.LoadingInbox(
+    commandText: String,
+    onCommandTextChange: (String) -> Unit,
+    onSendGoal: () -> Unit,
+) {
     TopBar(nodeName = "Hermes", nodeStatus = "loading")
     HermesSectionHeader(SectionHeaderState("INBOX"))
     BasicText(
@@ -103,13 +138,21 @@ private fun ColumnScope.LoadingInbox() {
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
     )
     Spacer(Modifier.weight(1f))
-    HermesCommandBar(CommandBarState())
+    HermesCommandBar(
+        state = CommandBarState(text = commandText, canSend = commandText.isNotBlank()),
+        onTextChange = onCommandTextChange,
+        onSend = onSendGoal,
+    )
     Spacer(Modifier.height(6.dp))
 }
 
 @Composable
 private fun ColumnScope.ReadyInbox(
     state: InboxLoadState.Ready,
+    timelineState: SessionTimelineState?,
+    commandText: String,
+    onCommandTextChange: (String) -> Unit,
+    onSendGoal: () -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
 ) {
@@ -120,6 +163,23 @@ private fun ColumnScope.ReadyInbox(
             style = TextStyle(color = color(HermesColors.Warning), fontSize = 11.sp),
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
+    }
+
+    timelineState?.let { timeline ->
+        HermesSectionHeader(SectionHeaderState("SESSION", timeline.rows.size))
+        timeline.rows.forEach { row ->
+            HermesInboxItem(
+                InboxItemState(
+                    title = row.title,
+                    subtitle = row.subtitle,
+                    kind = when (row.kind) {
+                        TimelineRowKind.UserGoal -> InboxItemKind.Running
+                        TimelineRowKind.Thinking -> InboxItemKind.Running
+                        TimelineRowKind.Result -> InboxItemKind.Result
+                    },
+                )
+            )
+        }
     }
 
     state.inbox.sections.forEach { section ->
@@ -139,7 +199,11 @@ private fun ColumnScope.ReadyInbox(
     }
 
     Spacer(Modifier.weight(1f))
-    HermesCommandBar(CommandBarState())
+    HermesCommandBar(
+        state = CommandBarState(text = commandText, canSend = commandText.isNotBlank()),
+        onTextChange = onCommandTextChange,
+        onSend = onSendGoal,
+    )
     Spacer(Modifier.height(6.dp))
 }
 

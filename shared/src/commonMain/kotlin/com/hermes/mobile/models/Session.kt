@@ -9,7 +9,7 @@ data class SessionSummary(
     val id: String,
     val title: String,
     val status: SessionStatus,
-    val source: String,
+    val source: String = "mobile",
     val summary: String? = null,
     val provider: String? = null,
     val model: String? = null,
@@ -21,6 +21,7 @@ data class SessionSummary(
 @Serializable
 enum class SessionStatus {
     @SerialName("running") Running,
+    @SerialName("waiting_approval") WaitingApproval,
     @SerialName("completed") Completed,
     @SerialName("failed") Failed,
     @SerialName("cancelled") Cancelled,

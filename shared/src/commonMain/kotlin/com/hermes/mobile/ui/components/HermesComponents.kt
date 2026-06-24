@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -169,6 +170,8 @@ private fun ApprovalActionButton(
 fun HermesCommandBar(
     state: CommandBarState,
     modifier: Modifier = Modifier,
+    onTextChange: ((String) -> Unit)? = null,
+    onSend: (() -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(HermesRadius.Input.dp)
     Row(
@@ -186,11 +189,29 @@ fun HermesCommandBar(
             style = rowTitleStyle().copy(color = color(HermesTheme.colors.accent)),
         )
         Spacer(Modifier.width(10.dp))
+        BasicTextField(
+            value = state.text,
+            onValueChange = { onTextChange?.invoke(it) },
+            enabled = onTextChange != null,
+            textStyle = rowTitleStyle().copy(color = color(HermesTheme.colors.textPrimary)),
+            modifier = Modifier.weight(1f),
+            decorationBox = { innerTextField ->
+                if (state.text.isEmpty()) {
+                    BasicText(
+                        text = state.placeholder,
+                        style = rowTitleStyle().copy(color = color(HermesTheme.colors.textTertiary)),
+                    )
+                }
+                innerTextField()
+            },
+        )
+        Spacer(Modifier.width(10.dp))
         BasicText(
-            text = state.text.ifEmpty { state.placeholder },
-            style = rowTitleStyle().copy(
-                color = color(if (state.text.isEmpty()) HermesTheme.colors.textTertiary else HermesTheme.colors.textPrimary),
+            text = "Send",
+            style = badgeStyle().copy(
+                color = color(if (state.canSend) HermesTheme.colors.accent else HermesTheme.colors.textTertiary),
             ),
+            modifier = Modifier.then(if (state.canSend && onSend != null) Modifier.clickable(onClick = onSend) else Modifier),
         )
     }
 }

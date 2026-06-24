@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from .models import Approval, ApprovalStatus, RiskLevel, SessionTimeline, TimelineItem, ToolCall, expires_in, now_utc
+from .models import (
+    Approval,
+    ApprovalStatus,
+    RiskLevel,
+    SessionSummary,
+    SessionTimeline,
+    TimelineItem,
+    ToolCall,
+    expires_in,
+    now_utc,
+)
 
 
 class MockMobileStore:
@@ -28,6 +38,15 @@ class MockMobileStore:
                 },
                 created_at=created_at,
                 expires_at=expires_in(15),
+            )
+        }
+        self.sessions: dict[str, SessionSummary] = {
+            "sess_mock_contribution": SessionSummary(
+                id="sess_mock_contribution",
+                title="Hermes-Agent contribution #2",
+                status="waiting_approval",
+                created_at=created_at,
+                updated_at=created_at,
             )
         }
         self.timelines: dict[str, SessionTimeline] = {
@@ -100,3 +119,66 @@ class MockMobileStore:
     def get_timeline(self, session_id: str) -> SessionTimeline | None:
         timeline = self.timelines.get(session_id)
         return deepcopy(timeline) if timeline else None
+
+    def create_session_from_goal(self, goal: str) -> tuple[SessionSummary, SessionTimeline]:
+        created_at = now_utc()
+        session_id = f"sess_goal_{len(self.sessions) + 1}"
+        session = SessionSummary(
+            id=session_id,
+            title=goal,
+            status="running",
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        timeline = SessionTimeline(
+            session_id=session_id,
+            title=goal,
+            items=[
+                TimelineItem(
+                    type="user_goal",
+                    id=f"{session_id}_goal_1",
+                    text=goal,
+                    created_at=created_at,
+                ),
+                self._thinking_item(session_id=session_id, index=1, created_at=created_at),
+            ],
+        )
+        self.sessions[session_id] = session
+        self.timelines[session_id] = timeline
+        return deepcopy(session), deepcopy(timeline)
+
+    def append_goal(self, session_id: str, goal: str) -> tuple[SessionSummary, SessionTimeline] | None:
+        session = self.sessions.get(session_id)
+        timeline = self.timelines.get(session_id)
+        if not session or not timeline:
+            return None
+        created_at = now_utc()
+        next_index = len(timeline.items) + 1
+        timeline.items.append(
+            TimelineItem(
+                type="user_goal",
+                id=f"{session_id}_goal_{next_index}",
+                text=goal,
+                created_at=created_at,
+            )
+        )
+        timeline.items.append(self._thinking_item(session_id=session_id, index=next_index + 1, created_at=created_at))
+        session.status = "running"
+        session.updated_at = created_at
+        return deepcopy(session), deepcopy(timeline)
+
+    def _thinking_item(self, session_id: str, index: int, created_at) -> TimelineItem:
+        return TimelineItem(
+            type="thinking_block",
+            id=f"{session_id}_think_{index}",
+            title="Queued",
+            created_at=created_at,
+            tool_calls=[
+                ToolCall(
+                    id=f"{session_id}_tool_{index}",
+                    name="mobile_goal",
+                    summary="Accepted goal from mobile command bar",
+                    status="running",
+                )
+            ],
+        )

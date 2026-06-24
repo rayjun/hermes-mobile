@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket
 
-from .models import ApprovalDecision, ApprovalStatus, StatusResponse
+from .models import ApprovalDecision, ApprovalStatus, GoalRequest, GoalResponse, StatusResponse
 from .storage import MockMobileStore
 
 
@@ -55,6 +55,19 @@ def create_app() -> FastAPI:
         if not approval:
             raise HTTPException(status_code=404, detail="approval_not_found")
         return approval
+
+    @app.post("/mobile/v1/sessions", response_model=GoalResponse)
+    def create_session(request: GoalRequest) -> GoalResponse:
+        session, timeline = store.create_session_from_goal(request.goal)
+        return GoalResponse(session=session, timeline=timeline)
+
+    @app.post("/mobile/v1/sessions/{session_id}/goals", response_model=GoalResponse)
+    def append_goal(session_id: str, request: GoalRequest) -> GoalResponse:
+        result = store.append_goal(session_id, request.goal)
+        if not result:
+            raise HTTPException(status_code=404, detail="session_not_found")
+        session, timeline = result
+        return GoalResponse(session=session, timeline=timeline)
 
     @app.get("/mobile/v1/sessions/{session_id}/timeline")
     def session_timeline(session_id: str) -> object:

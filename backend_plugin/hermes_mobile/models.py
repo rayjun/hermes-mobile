@@ -80,6 +80,23 @@ class SessionTimeline(BaseModel):
     items: list[TimelineItem]
 
 
+class GoalRequest(BaseModel):
+    goal: str = Field(min_length=1, max_length=4000)
+
+
+class SessionSummary(BaseModel):
+    id: str
+    title: str
+    status: Literal["running", "waiting_approval", "completed", "failed"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class GoalResponse(BaseModel):
+    session: SessionSummary
+    timeline: SessionTimeline
+
+
 def now_utc() -> datetime:
     return datetime.now(UTC)
 

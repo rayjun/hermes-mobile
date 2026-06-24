@@ -47,6 +47,38 @@ def test_approve_endpoint_resolves_pending_approval():
     assert body["status"] == "approved"
 
 
+def test_create_session_from_goal_returns_structured_timeline():
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/mobile/v1/sessions",
+        json={"goal": "Summarize pending approvals and suggest next action"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["session"]["id"].startswith("sess_goal_")
+    assert body["session"]["title"] == "Summarize pending approvals and suggest next action"
+    assert body["timeline"]["session_id"] == body["session"]["id"]
+    assert body["timeline"]["items"][0]["type"] == "user_goal"
+    assert body["timeline"]["items"][0]["text"] == "Summarize pending approvals and suggest next action"
+
+
+def test_append_goal_to_existing_session_adds_execution_log_item():
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/mobile/v1/sessions/sess_mock_contribution/goals",
+        json={"goal": "Continue with the safest next step"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["timeline"]["session_id"] == "sess_mock_contribution"
+    assert body["timeline"]["items"][-1]["type"] == "thinking_block"
+    assert body["timeline"]["items"][-2]["text"] == "Continue with the safest next step"
+
+
 def test_session_timeline_returns_execution_log_not_chat_bubbles():
     client = TestClient(create_app())
 
