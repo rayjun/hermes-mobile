@@ -10,6 +10,7 @@ import com.hermes.mobile.models.SessionTimeline
 import com.hermes.mobile.models.SessionSummary
 import com.hermes.mobile.models.SessionsResponse
 import com.hermes.mobile.ui.ApprovalActionGateway
+import com.hermes.mobile.ui.GatewayStatusProbe
 import com.hermes.mobile.ui.GoalGateway
 import com.hermes.mobile.ui.InboxGateway
 import com.hermes.mobile.ui.SessionsGateway
@@ -28,8 +29,10 @@ import kotlinx.serialization.json.Json
 class HermesApi(
     private val baseUrl: String,
     private val client: HttpClient = defaultHttpClient(),
-) : InboxGateway, ApprovalActionGateway, GoalGateway, SessionsGateway {
+) : InboxGateway, ApprovalActionGateway, GoalGateway, SessionsGateway, GatewayStatusProbe {
     override suspend fun status(): NodeStatus = client.get("$baseUrl/mobile/v1/status").body()
+
+    override suspend fun status(baseUrl: String): NodeStatus = client.get("$baseUrl/mobile/v1/status").body()
 
     suspend fun pendingApprovalsResponse(): ApprovalsResponse =
         client.get("$baseUrl/mobile/v1/approvals?status=pending").body()

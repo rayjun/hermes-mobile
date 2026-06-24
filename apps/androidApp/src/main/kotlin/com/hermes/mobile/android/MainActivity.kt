@@ -34,6 +34,8 @@ import com.hermes.mobile.api.defaultHttpClient
 import com.hermes.mobile.models.Approval
 import com.hermes.mobile.models.SessionSummary
 import com.hermes.mobile.ui.ApprovalActionController
+import com.hermes.mobile.ui.GatewayConnectionResult
+import com.hermes.mobile.ui.GatewayConnectionState
 import com.hermes.mobile.ui.GatewaySettingsController
 import com.hermes.mobile.ui.GatewaySettingsError
 import com.hermes.mobile.ui.GatewaySettingsState
@@ -130,6 +132,18 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onGatewayInputChange = { gatewayInput = it },
+                    onTestGateway = {
+                        gatewaySettings = gatewaySettings.copy(
+                            connection = GatewayConnectionResult(GatewayConnectionState.Testing, "Testing gateway…"),
+                            error = null,
+                        )
+                        scope.launch {
+                            gatewaySettings = gatewaySettings.copy(
+                                connection = gatewaySettingsController.testConnection(gatewayInput, api),
+                                error = null,
+                            )
+                        }
+                    },
                     onSaveGateway = {
                         try {
                             val next = gatewaySettingsController.save(gatewayInput)
@@ -182,6 +196,7 @@ fun HermesMobileApp(
     onBackToInbox: () -> Unit,
     onSelectTab: (MobileTab) -> Unit,
     onGatewayInputChange: (String) -> Unit,
+    onTestGateway: () -> Unit,
     onSaveGateway: () -> Unit,
     onOpenSession: (SessionSummary) -> Unit,
     onApprove: (Approval) -> Unit,
@@ -228,6 +243,7 @@ fun HermesMobileApp(
                 gatewayInput = gatewayInput,
                 selectedTab = selectedTab,
                 onGatewayInputChange = onGatewayInputChange,
+                onTestGateway = onTestGateway,
                 onSaveGateway = onSaveGateway,
                 onSelectTab = onSelectTab,
             )
@@ -384,6 +400,7 @@ private fun ColumnScope.SettingsScreen(
     gatewayInput: String,
     selectedTab: MobileTab,
     onGatewayInputChange: (String) -> Unit,
+    onTestGateway: () -> Unit,
     onSaveGateway: () -> Unit,
     onSelectTab: (MobileTab) -> Unit,
 ) {
@@ -406,6 +423,22 @@ private fun ColumnScope.SettingsScreen(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
         )
     }
+    gatewaySettings.connection?.let { connection ->
+        BasicText(
+            text = "${connection.state.name}: ${connection.message}",
+            style = TextStyle(
+                color = color(
+                    when (connection.state) {
+                        GatewayConnectionState.Online -> HermesColors.Success
+                        GatewayConnectionState.Offline, GatewayConnectionState.Invalid -> HermesColors.Error
+                        GatewayConnectionState.Testing, GatewayConnectionState.Unknown -> HermesColors.TextSecondary
+                    }
+                ),
+                fontSize = 11.sp,
+            ),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        )
+    }
     HermesCommandBar(
         state = CommandBarState(
             placeholder = GatewaySettingsController.DefaultGatewayBaseUrl,
@@ -415,6 +448,22 @@ private fun ColumnScope.SettingsScreen(
         onTextChange = onGatewayInputChange,
         onSend = onSaveGateway,
     )
+    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+        BasicText(
+            text = "Test connection",
+            style = TextStyle(color = color(HermesColors.Blue), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onTestGateway() },
+        )
+        BasicText(
+            text = "Save gateway",
+            style = TextStyle(color = color(HermesColors.Blue), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onSaveGateway() },
+        )
+    }
     BasicText(
         text = "Examples: http://10.0.2.2:8765 · http://100.x.y.z:8765 · https://your-vps.example",
         style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 11.sp),

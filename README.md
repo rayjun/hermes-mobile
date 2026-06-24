@@ -55,7 +55,7 @@ python3 -m uvicorn backend_plugin.hermes_mobile.server:app --host 127.0.0.1 --po
 
 If the gateway is unavailable, the app renders a sample approval fallback instead of a blank screen.
 
-Configure the mobile Gateway URL from the Android Settings tab. The URL is saved in Android `SharedPreferences` and can point at emulator, LAN, Tailscale, or VPS endpoints:
+Configure the mobile Gateway URL from the Android Settings tab. The URL is saved in Android `SharedPreferences` and can point at emulator, LAN, Tailscale, or VPS endpoints. Use `Test connection` before saving to probe `GET /mobile/v1/status` and show Online/Offline/Invalid feedback:
 
 ```text
 http://10.0.2.2:8765
