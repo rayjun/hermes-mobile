@@ -30,7 +30,7 @@ It is not a chatbot UI and not a mobile runtime for running agents on-device. Th
 This repo now contains:
 
 - `backend_plugin/hermes_mobile/` — FastAPI mock Mobile Gateway adapter with status, approvals, approval decisions, session timeline, and WebSocket event stream.
-- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, repositories, and Hermes design token state.
+- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, repositories, Compose runtime theme tokens, Inbox reducer state, and Approval card state.
 - `tests/` — pytest coverage for the mock gateway API.
 
 Run KMP shared build/tests:
