@@ -14,6 +14,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(compose.runtime)
+            implementation(compose.foundation)
             implementation("io.ktor:ktor-client-core:3.1.3")
             implementation("io.ktor:ktor-client-websockets:3.1.3")
             implementation("io.ktor:ktor-client-content-negotiation:3.1.3")
