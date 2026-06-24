@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hermes.mobile.api.HermesApi
+import com.hermes.mobile.models.Approval
+import com.hermes.mobile.ui.ApprovalActionController
 import com.hermes.mobile.ui.InboxLoadState
 import com.hermes.mobile.ui.InboxLoader
 import com.hermes.mobile.ui.components.CommandBarState
@@ -34,6 +37,7 @@ import com.hermes.mobile.ui.components.HermesSectionHeader
 import com.hermes.mobile.ui.components.SectionHeaderState
 import com.hermes.mobile.ui.theme.HermesColors
 import com.hermes.mobile.ui.theme.HermesTheme
+import kotlinx.coroutines.launch
 
 private const val DefaultGatewayBaseUrl = "http://10.0.2.2:8765"
 
@@ -43,17 +47,39 @@ class MainActivity : ComponentActivity() {
         setContent {
             HermesTheme {
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
+                val api = remember { HermesApi(DefaultGatewayBaseUrl) }
+                val loader = remember { InboxLoader(api) }
+                val actionController = remember { ApprovalActionController(api) }
+                val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) {
-                    state = InboxLoader(HermesApi(DefaultGatewayBaseUrl)).load()
+                    state = loader.load()
                 }
-                HermesMobileApp(state)
+                HermesMobileApp(
+                    state = state,
+                    onApprove = { approval ->
+                        scope.launch {
+                            actionController.approve(approval, biometricVerified = true)
+                            state = loader.load()
+                        }
+                    },
+                    onDeny = { approval ->
+                        scope.launch {
+                            actionController.deny(approval, reason = "Denied from mobile")
+                            state = loader.load()
+                        }
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
-fun HermesMobileApp(state: InboxLoadState) {
+fun HermesMobileApp(
+    state: InboxLoadState,
+    onApprove: (Approval) -> Unit,
+    onDeny: (Approval) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -62,7 +88,7 @@ fun HermesMobileApp(state: InboxLoadState) {
     ) {
         when (state) {
             InboxLoadState.Loading -> LoadingInbox()
-            is InboxLoadState.Ready -> ReadyInbox(state)
+            is InboxLoadState.Ready -> ReadyInbox(state, onApprove, onDeny)
         }
     }
 }
@@ -82,7 +108,11 @@ private fun ColumnScope.LoadingInbox() {
 }
 
 @Composable
-private fun ColumnScope.ReadyInbox(state: InboxLoadState.Ready) {
+private fun ColumnScope.ReadyInbox(
+    state: InboxLoadState.Ready,
+    onApprove: (Approval) -> Unit,
+    onDeny: (Approval) -> Unit,
+) {
     TopBar(nodeName = state.nodeName, nodeStatus = state.nodeStatus)
     state.notice?.let { notice ->
         BasicText(
@@ -95,7 +125,14 @@ private fun ColumnScope.ReadyInbox(state: InboxLoadState.Ready) {
     state.inbox.sections.forEach { section ->
         HermesSectionHeader(SectionHeaderState(section.title, section.items.size))
         if (section.title == "APPROVALS") {
-            state.approvalCards.forEach { card -> HermesApprovalCard(card) }
+            state.approvalCards.forEach { card ->
+                val approval = state.approvals.firstOrNull { it.id == card.id }
+                HermesApprovalCard(
+                    state = card,
+                    onApprove = approval?.let { { onApprove(it) } },
+                    onDeny = approval?.let { { onDeny(it) } },
+                )
+            }
         } else {
             section.items.forEach { item -> HermesInboxItem(item) }
         }

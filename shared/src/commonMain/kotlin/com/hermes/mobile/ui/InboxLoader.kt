@@ -21,6 +21,7 @@ sealed interface InboxLoadState {
         val nodeName: String,
         val nodeStatus: String,
         val inbox: InboxState,
+        val approvals: List<Approval>,
         val approvalCards: List<ApprovalCardState>,
         val notice: String? = null,
         val usingFallback: Boolean = false,
@@ -37,6 +38,7 @@ class InboxLoader(
             nodeName = status.nodeName,
             nodeStatus = status.status,
             inbox = InboxState.from(approvals = approvals),
+            approvals = approvals,
             approvalCards = approvals.map(ApprovalCardState::from),
         )
     } catch (_: Throwable) {
@@ -45,6 +47,7 @@ class InboxLoader(
             nodeName = "Hermes",
             nodeStatus = "offline",
             inbox = InboxState.from(approvals = listOf(fallback)),
+            approvals = listOf(fallback),
             approvalCards = listOf(ApprovalCardState.from(fallback)),
             notice = "Gateway unavailable · showing sample data",
             usingFallback = true,

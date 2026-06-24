@@ -5,6 +5,7 @@ import com.hermes.mobile.models.ApprovalDecision
 import com.hermes.mobile.models.ApprovalsResponse
 import com.hermes.mobile.models.NodeStatus
 import com.hermes.mobile.models.SessionTimeline
+import com.hermes.mobile.ui.ApprovalActionGateway
 import com.hermes.mobile.ui.InboxGateway
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -20,7 +21,7 @@ import kotlinx.serialization.json.Json
 class HermesApi(
     private val baseUrl: String,
     private val client: HttpClient = defaultHttpClient(),
-) : InboxGateway {
+) : InboxGateway, ApprovalActionGateway {
     override suspend fun status(): NodeStatus = client.get("$baseUrl/mobile/v1/status").body()
 
     suspend fun pendingApprovalsResponse(): ApprovalsResponse =
@@ -31,13 +32,13 @@ class HermesApi(
     suspend fun approval(id: String): Approval =
         client.get("$baseUrl/mobile/v1/approvals/$id").body()
 
-    suspend fun approve(id: String, decision: ApprovalDecision = ApprovalDecision()): Approval =
+    override suspend fun approve(id: String, decision: ApprovalDecision): Approval =
         client.post("$baseUrl/mobile/v1/approvals/$id/approve") {
             contentType(ContentType.Application.Json)
             setBody(decision)
         }.body()
 
-    suspend fun deny(id: String, decision: ApprovalDecision): Approval =
+    override suspend fun deny(id: String, decision: ApprovalDecision): Approval =
         client.post("$baseUrl/mobile/v1/approvals/$id/deny") {
             contentType(ContentType.Application.Json)
             setBody(decision)

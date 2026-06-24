@@ -30,8 +30,8 @@ It is not a chatbot UI and not a mobile runtime for running agents on-device. Th
 This repo now contains:
 
 - `backend_plugin/hermes_mobile/` — FastAPI mock Mobile Gateway adapter with status, approvals, approval decisions, session timeline, and WebSocket event stream.
-- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, and shared Compose components for section headers, inbox rows, approval cards, and the command bar.
-- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` mock gateway data with an offline sample fallback.
+- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, approval action controller, and shared Compose components for section headers, inbox rows, approval cards, approve/deny actions, and the command bar.
+- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` mock gateway data with an offline sample fallback and approve/deny actions.
 - `tests/` — pytest coverage for the mock gateway API.
 
 Run KMP shared build/tests:

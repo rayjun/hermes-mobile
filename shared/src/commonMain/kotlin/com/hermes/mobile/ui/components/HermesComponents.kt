@@ -1,5 +1,6 @@
 package com.hermes.mobile.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +91,8 @@ fun HermesInboxItem(
 fun HermesApprovalCard(
     state: ApprovalCardState,
     modifier: Modifier = Modifier,
+    onApprove: (() -> Unit)? = null,
+    onDeny: (() -> Unit)? = null,
 ) {
     val riskStyle = ApprovalRiskStyle.forRisk(state.risk)
     val shape = RoundedCornerShape(HermesRadius.Card.dp)
@@ -128,7 +131,38 @@ fun HermesApprovalCard(
                 )
             }
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ApprovalActionButton(
+                text = "Approve",
+                foreground = HermesColors.Success,
+                onClick = onApprove,
+            )
+            ApprovalActionButton(
+                text = "Deny",
+                foreground = HermesColors.Error,
+                onClick = onDeny,
+            )
+        }
     }
+}
+
+@Composable
+private fun ApprovalActionButton(
+    text: String,
+    foreground: Long,
+    onClick: (() -> Unit)?,
+) {
+    val shape = RoundedCornerShape(HermesRadius.Button.dp)
+    val modifier = Modifier
+        .clip(shape)
+        .border(1.dp, color(HermesTheme.colors.border), shape)
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .padding(horizontal = 10.dp, vertical = 6.dp)
+    BasicText(
+        text = text,
+        style = badgeStyle().copy(color = color(foreground)),
+        modifier = modifier,
+    )
 }
 
 @Composable

@@ -31,7 +31,7 @@ class HermesApiTest {
     fun approvesPendingApproval() = runTest {
         val api = HermesApi("http://test", mockClient(approvedApprovalJson))
 
-        val approval = api.approve("appr_mock_git_push")
+        val approval = api.approve("appr_mock_git_push", com.hermes.mobile.models.ApprovalDecision())
 
         assertEquals("appr_mock_git_push", approval.id)
         assertEquals(ApprovalStatus.Approved, approval.status)
