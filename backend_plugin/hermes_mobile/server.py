@@ -79,6 +79,7 @@ def create_app() -> FastAPI:
     @app.websocket("/mobile/v1/events")
     async def events(websocket: WebSocket) -> None:
         await websocket.accept()
+        session_id = websocket.query_params.get("session_id")
         await websocket.send_json(
             {
                 "id": "evt_mock_approval_requested",
@@ -88,6 +89,27 @@ def create_app() -> FastAPI:
                 "payload": {"approval_id": "appr_mock_git_push"},
             }
         )
+        if session_id:
+            timeline = store.get_timeline(session_id)
+            if timeline:
+                await websocket.send_json(
+                    {
+                        "id": "evt_mock_session_started",
+                        "type": "session.started",
+                        "session_id": session_id,
+                        "created_at": "2026-06-24T10:00:01Z",
+                        "payload": {"timeline": timeline.model_dump(mode="json")},
+                    }
+                )
+                await websocket.send_json(
+                    {
+                        "id": "evt_mock_session_updated",
+                        "type": "session.updated",
+                        "session_id": session_id,
+                        "created_at": "2026-06-24T10:00:02Z",
+                        "payload": {"timeline": timeline.model_dump(mode="json")},
+                    }
+                )
         await websocket.close()
 
     return app

@@ -50,9 +50,9 @@ enum class TimelineRowKind {
     Result,
 }
 
-private fun GoalResponse.toTimelineState(): SessionTimelineState = timeline.toState()
+fun GoalResponse.toTimelineState(): SessionTimelineState = timeline.toState()
 
-private fun SessionTimeline.toState(): SessionTimelineState = SessionTimelineState(
+fun SessionTimeline.toState(): SessionTimelineState = SessionTimelineState(
     sessionId = sessionId,
     title = title,
     rows = items.map(TimelineItem::toRowState),

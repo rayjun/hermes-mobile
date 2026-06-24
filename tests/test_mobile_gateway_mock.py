@@ -96,10 +96,24 @@ def test_session_timeline_returns_execution_log_not_chat_bubbles():
 
 def test_events_websocket_emits_structured_approval_event():
     client = TestClient(create_app())
-
     with client.websocket_connect("/mobile/v1/events") as websocket:
         event = websocket.receive_json()
 
     assert event["type"] == "approval.requested"
     assert event["session_id"] == "sess_mock_contribution"
     assert event["payload"]["approval_id"] == "appr_mock_git_push"
+
+
+def test_events_websocket_emits_session_timeline_updates():
+    client = TestClient(create_app())
+    with client.websocket_connect("/mobile/v1/events?session_id=sess_mock_contribution") as websocket:
+        events = [websocket.receive_json(), websocket.receive_json(), websocket.receive_json()]
+
+    assert [event["type"] for event in events] == [
+        "approval.requested",
+        "session.started",
+        "session.updated",
+    ]
+    updated = events[-1]
+    assert updated["session_id"] == "sess_mock_contribution"
+    assert updated["payload"]["timeline"]["items"][-1]["type"] == "assistant_result"

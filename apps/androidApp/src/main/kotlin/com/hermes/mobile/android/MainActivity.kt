@@ -26,12 +26,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hermes.mobile.api.HermesApi
+import com.hermes.mobile.api.HermesEventStream
+import com.hermes.mobile.api.defaultHttpClient
 import com.hermes.mobile.models.Approval
 import com.hermes.mobile.ui.ApprovalActionController
 import com.hermes.mobile.ui.GoalController
 import com.hermes.mobile.ui.InboxLoadState
 import com.hermes.mobile.ui.SessionDetailController
 import com.hermes.mobile.ui.SessionDetailState
+import com.hermes.mobile.ui.SessionLiveEventController
 import com.hermes.mobile.ui.TimelineRowKind
 import com.hermes.mobile.ui.InboxLoader
 import com.hermes.mobile.ui.components.CommandBarState
@@ -44,6 +47,7 @@ import com.hermes.mobile.ui.components.InboxItemState
 import com.hermes.mobile.ui.components.SectionHeaderState
 import com.hermes.mobile.ui.theme.HermesColors
 import com.hermes.mobile.ui.theme.HermesTheme
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 private const val DefaultGatewayBaseUrl = "http://10.0.2.2:8765"
@@ -61,9 +65,19 @@ class MainActivity : ComponentActivity() {
                 val actionController = remember { ApprovalActionController(api) }
                 val goalController = remember { GoalController(api) }
                 val sessionController = remember { SessionDetailController(goalController) }
+                val eventStream = remember { HermesEventStream(DefaultGatewayBaseUrl, defaultHttpClient()) }
+                val liveEventController = remember { SessionLiveEventController() }
                 val scope = rememberCoroutineScope()
                 LaunchedEffect(Unit) {
                     state = loader.load()
+                }
+                LaunchedEffect(sessionDetail?.timeline?.sessionId) {
+                    val activeDetail = sessionDetail ?: return@LaunchedEffect
+                    runCatching {
+                        eventStream.events(activeDetail.timeline.sessionId).collect { event ->
+                            sessionDetail = sessionDetail?.let { liveEventController.apply(it, event) }
+                        }
+                    }
                 }
                 HermesMobileApp(
                     state = state,

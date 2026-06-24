@@ -33,4 +33,8 @@ dependencies {
     implementation(compose.foundation)
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("io.ktor:ktor-client-okhttp:3.1.3")
+    implementation("io.ktor:ktor-client-websockets:3.1.3")
+    implementation("io.ktor:ktor-client-content-negotiation:3.1.3")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 }

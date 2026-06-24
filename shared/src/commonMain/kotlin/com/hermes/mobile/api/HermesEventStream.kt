@@ -14,9 +14,10 @@ class HermesEventStream(
     private val client: HttpClient,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
-    fun events(): Flow<HermesEvent> = flow {
+    fun events(sessionId: String? = null): Flow<HermesEvent> = flow {
         val wsUrl = baseUrl.replaceFirst("http://", "ws://").replaceFirst("https://", "wss://")
-        client.webSocket("$wsUrl/mobile/v1/events") {
+        val path = if (sessionId == null) "$wsUrl/mobile/v1/events" else "$wsUrl/mobile/v1/events?session_id=$sessionId"
+        client.webSocket(path) {
             for (frame in incoming) {
                 if (frame is Frame.Text) {
                     emit(json.decodeFromString<HermesEvent>(frame.readText()))
