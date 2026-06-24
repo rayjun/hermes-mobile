@@ -33,6 +33,12 @@ This repo now contains:
 - `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, repositories, and Hermes design token state.
 - `tests/` — pytest coverage for the mock gateway API.
 
+Run KMP shared build/tests:
+
+```bash
+./gradlew :shared:build --no-daemon
+```
+
 Run backend tests:
 
 ```bash

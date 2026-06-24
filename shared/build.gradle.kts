@@ -23,6 +23,7 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation("io.ktor:ktor-client-mock:3.1.3")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
         }
     }
 }
