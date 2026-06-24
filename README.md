@@ -31,7 +31,7 @@ This repo now contains:
 
 - `backend_plugin/hermes_mobile/` — FastAPI Mobile Gateway adapter with mock mode plus read-only Hermes `state.db` mode for real session listing/timeline inspection; includes status, approvals, approval decisions, goal/session creation, session timeline, and WebSocket event stream including session timeline updates.
 - `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, WebSocket event stream, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, approval action controller, goal/session controller, session detail controller, sessions loader, live session event reducer, and shared Compose components for section headers, inbox rows, approval cards, approve/deny actions, and editable command bar.
-- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` gateway data with an offline sample fallback, approve/deny actions, a Sessions tab backed by `/mobile/v1/sessions`, and a `Start with a goal` command bar that opens a session detail timeline, continues the same session on follow-up goals, and applies live WebSocket timeline updates.
+- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` gateway data with an offline sample fallback, approve/deny actions, a Sessions tab backed by `/mobile/v1/sessions`, a Settings tab for saving the Gateway URL, and a `Start with a goal` command bar that opens a session detail timeline, continues the same session on follow-up goals, and applies live WebSocket timeline updates.
 - `tests/` — pytest coverage for the mock gateway API.
 
 Run KMP shared build/tests:
@@ -54,6 +54,15 @@ python3 -m uvicorn backend_plugin.hermes_mobile.server:app --host 127.0.0.1 --po
 ```
 
 If the gateway is unavailable, the app renders a sample approval fallback instead of a blank screen.
+
+Configure the mobile Gateway URL from the Android Settings tab. The URL is saved in Android `SharedPreferences` and can point at emulator, LAN, Tailscale, or VPS endpoints:
+
+```text
+http://10.0.2.2:8765
+http://192.168.1.10:8765
+http://100.x.y.z:8765
+https://your-vps.example
+```
 
 Run backend tests:
 

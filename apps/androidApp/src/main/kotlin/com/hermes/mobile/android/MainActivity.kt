@@ -1,5 +1,6 @@
 package com.hermes.mobile.android
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +34,9 @@ import com.hermes.mobile.api.defaultHttpClient
 import com.hermes.mobile.models.Approval
 import com.hermes.mobile.models.SessionSummary
 import com.hermes.mobile.ui.ApprovalActionController
+import com.hermes.mobile.ui.GatewaySettingsController
+import com.hermes.mobile.ui.GatewaySettingsError
+import com.hermes.mobile.ui.GatewaySettingsState
 import com.hermes.mobile.ui.GoalController
 import com.hermes.mobile.ui.InboxLoadState
 import com.hermes.mobile.ui.SessionDetailController
@@ -55,28 +59,35 @@ import com.hermes.mobile.ui.theme.HermesTheme
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
-private const val DefaultGatewayBaseUrl = "http://10.0.2.2:8765"
+private const val GatewayPrefsName = "hermes_mobile_gateway"
+private const val GatewayBaseUrlKey = "gateway_base_url"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             HermesTheme {
+                val gatewaySettingsController = remember { GatewaySettingsController() }
+                val gatewayPrefs = remember { getSharedPreferences(GatewayPrefsName, Context.MODE_PRIVATE) }
+                var gatewaySettings by remember {
+                    mutableStateOf(gatewaySettingsController.initialState(gatewayPrefs.getString(GatewayBaseUrlKey, null)))
+                }
+                var gatewayInput by remember { mutableStateOf(gatewaySettings.baseUrl) }
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
                 var sessionsState by remember { mutableStateOf<SessionsLoadState>(SessionsLoadState.Loading) }
-                var selectedTab by remember { mutableStateOf(MobileTab.Inbox) }
+                var selectedTab by remember { mutableStateOf(if (gatewaySettings.configured) MobileTab.Inbox else MobileTab.Settings) }
                 var commandText by remember { mutableStateOf("") }
                 var sessionDetail by remember { mutableStateOf<SessionDetailState?>(null) }
-                val api = remember { HermesApi(DefaultGatewayBaseUrl) }
-                val loader = remember { InboxLoader(api) }
-                val sessionsLoader = remember { SessionsLoader(api) }
-                val actionController = remember { ApprovalActionController(api) }
-                val goalController = remember { GoalController(api) }
-                val sessionController = remember { SessionDetailController(goalController) }
-                val eventStream = remember { HermesEventStream(DefaultGatewayBaseUrl, defaultHttpClient()) }
+                val api = remember(gatewaySettings.baseUrl) { HermesApi(gatewaySettings.baseUrl) }
+                val loader = remember(api) { InboxLoader(api) }
+                val sessionsLoader = remember(api) { SessionsLoader(api) }
+                val actionController = remember(api) { ApprovalActionController(api) }
+                val goalController = remember(api) { GoalController(api) }
+                val sessionController = remember(goalController) { SessionDetailController(goalController) }
+                val eventStream = remember(gatewaySettings.baseUrl) { HermesEventStream(gatewaySettings.baseUrl, defaultHttpClient()) }
                 val liveEventController = remember { SessionLiveEventController() }
                 val scope = rememberCoroutineScope()
-                LaunchedEffect(Unit) {
+                LaunchedEffect(gatewaySettings.baseUrl) {
                     state = loader.load()
                     sessionsState = sessionsLoader.load()
                 }
@@ -92,6 +103,8 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     sessionsState = sessionsState,
                     selectedTab = selectedTab,
+                    gatewaySettings = gatewaySettings,
+                    gatewayInput = gatewayInput,
                     sessionDetail = sessionDetail,
                     commandText = commandText,
                     onCommandTextChange = { commandText = it },
@@ -114,6 +127,21 @@ class MainActivity : ComponentActivity() {
                         sessionDetail = null
                         if (tab == MobileTab.Sessions) {
                             scope.launch { sessionsState = sessionsLoader.load() }
+                        }
+                    },
+                    onGatewayInputChange = { gatewayInput = it },
+                    onSaveGateway = {
+                        try {
+                            val next = gatewaySettingsController.save(gatewayInput)
+                            gatewayPrefs.edit().putString(GatewayBaseUrlKey, next.baseUrl).apply()
+                            gatewaySettings = next
+                            gatewayInput = next.baseUrl
+                            sessionDetail = null
+                            state = InboxLoadState.Loading
+                            sessionsState = SessionsLoadState.Loading
+                            selectedTab = MobileTab.Inbox
+                        } catch (_: GatewaySettingsError.InvalidUrl) {
+                            gatewaySettings = gatewaySettings.copy(error = "Enter an http:// or https:// gateway URL")
                         }
                     },
                     onOpenSession = { session ->
@@ -145,12 +173,16 @@ fun HermesMobileApp(
     state: InboxLoadState,
     sessionsState: SessionsLoadState,
     selectedTab: MobileTab,
+    gatewaySettings: GatewaySettingsState,
+    gatewayInput: String,
     sessionDetail: SessionDetailState?,
     commandText: String,
     onCommandTextChange: (String) -> Unit,
     onSendGoal: () -> Unit,
     onBackToInbox: () -> Unit,
     onSelectTab: (MobileTab) -> Unit,
+    onGatewayInputChange: (String) -> Unit,
+    onSaveGateway: () -> Unit,
     onOpenSession: (SessionSummary) -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
@@ -190,6 +222,14 @@ fun HermesMobileApp(
                 selectedTab = selectedTab,
                 onSelectTab = onSelectTab,
                 onOpenSession = onOpenSession,
+            )
+            MobileTab.Settings -> SettingsScreen(
+                gatewaySettings = gatewaySettings,
+                gatewayInput = gatewayInput,
+                selectedTab = selectedTab,
+                onGatewayInputChange = onGatewayInputChange,
+                onSaveGateway = onSaveGateway,
+                onSelectTab = onSelectTab,
             )
         }
     }
@@ -328,7 +368,61 @@ private fun BottomNav(
                 .weight(1f)
                 .clickable { onSelectTab(MobileTab.Sessions) },
         )
+        BasicText(
+            text = if (selected == MobileTab.Settings) "● Settings" else "○ Settings",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onSelectTab(MobileTab.Settings) },
+        )
     }
+}
+
+@Composable
+private fun ColumnScope.SettingsScreen(
+    gatewaySettings: GatewaySettingsState,
+    gatewayInput: String,
+    selectedTab: MobileTab,
+    onGatewayInputChange: (String) -> Unit,
+    onSaveGateway: () -> Unit,
+    onSelectTab: (MobileTab) -> Unit,
+) {
+    TopBar(nodeName = "Gateway", nodeStatus = if (gatewaySettings.configured) "online" else "offline")
+    HermesSectionHeader(SectionHeaderState("GATEWAY"))
+    BasicText(
+        text = "Connect Hermes Mobile to your local Gateway over Tailscale, LAN, emulator, or VPS.",
+        style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 13.sp),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+    )
+    BasicText(
+        text = "Current: ${gatewaySettings.baseUrl}",
+        style = TextStyle(color = color(HermesColors.TextPrimary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+    gatewaySettings.error?.let { error ->
+        BasicText(
+            text = error,
+            style = TextStyle(color = color(HermesColors.Error), fontSize = 11.sp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        )
+    }
+    HermesCommandBar(
+        state = CommandBarState(
+            placeholder = GatewaySettingsController.DefaultGatewayBaseUrl,
+            text = gatewayInput,
+            canSend = gatewayInput.isNotBlank(),
+        ),
+        onTextChange = onGatewayInputChange,
+        onSend = onSaveGateway,
+    )
+    BasicText(
+        text = "Examples: http://10.0.2.2:8765 · http://100.x.y.z:8765 · https://your-vps.example",
+        style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 11.sp),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+    Spacer(Modifier.weight(1f))
+    BottomNav(selected = selectedTab, onSelectTab = onSelectTab)
+    Spacer(Modifier.height(6.dp))
 }
 
 @Composable
@@ -394,6 +488,7 @@ private fun TopBar(nodeName: String, nodeStatus: String) {
 enum class MobileTab {
     Inbox,
     Sessions,
+    Settings,
 }
 
 private fun color(argb: Long): Color = Color(argb.toULong())
