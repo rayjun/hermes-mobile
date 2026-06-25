@@ -29,7 +29,7 @@ It is not a chatbot UI and not a mobile runtime for running agents on-device. Th
 
 This repo now contains:
 
-- `backend_plugin/hermes_mobile/` — FastAPI Mobile Gateway adapter with mock mode plus read-only Hermes `state.db` mode for real session listing/timeline inspection; includes status, approvals, approval decisions, goal/session creation, session timeline, artifacts, read-only cron jobs, and WebSocket event stream including session timeline updates.
+- `backend_plugin/hermes_mobile/` — FastAPI Mobile Gateway adapter with mock mode plus read-only Hermes `state.db` mode for real session listing/timeline inspection; includes status, approvals, approval decisions, goal/session creation, session timeline, artifacts, read-only cron jobs, and WebSocket event stream including session timeline updates. Optional `HERMES_MOBILE_USE_LIVE_APPROVALS=1` bridges the oldest blocking in-process Hermes `tools.approval` request per session into the mobile approvals API.
 - `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, WebSocket event stream, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, approval action controller, goal/session controller, session detail controller, sessions loader, artifacts loader, cron jobs loader, live session event reducer, and shared Compose components for section headers, inbox rows, approval cards, approve/deny actions, and editable command bar.
 - `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` gateway data with an offline sample fallback, approve/deny actions, Sessions, Artifacts, and Cron tabs backed by `/mobile/v1/sessions`, `/mobile/v1/artifacts`, and `/mobile/v1/cron/jobs`, read-only Cron job details, a Settings tab for saving the Gateway URL, and a `Start with a goal` command bar that opens a session detail timeline, continues the same session on follow-up goals, and applies live WebSocket timeline updates.
 - `tests/` — pytest coverage for the mock gateway API.
@@ -86,6 +86,16 @@ curl http://127.0.0.1:8765/mobile/v1/sessions
 ```
 
 This mode currently exposes real session summaries and timelines from `state.db`. Starting/appending real Hermes sessions and approval control remain mock-mode or future runtime integration work.
+
+Run with the experimental live approval bridge enabled:
+
+```bash
+PYTHONPATH=$HOME/projects/hermes-agent:$PYTHONPATH \
+HERMES_MOBILE_USE_LIVE_APPROVALS=1 \
+  python3 -m uvicorn backend_plugin.hermes_mobile.server:app --host 127.0.0.1 --port 8765
+```
+
+The bridge only sees in-process/importable Hermes Gateway approval queues. It does not persist approvals to disk and does not infer approvals from `state.db`. Mobile approve resolves a live request as one-time approval; mobile deny resolves it as deny.
 
 ## MVP
 

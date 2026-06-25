@@ -6,6 +6,7 @@ from typing import Protocol
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket
 
+from .live_approvals import LiveApprovalMobileStore
 from .models import Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, GoalRequest, GoalResponse, SessionSummary, SessionTimeline, StatusResponse
 from .real_store import StateDbMobileStore
 from .storage import MockMobileStore
@@ -26,12 +27,18 @@ class MobileStore(Protocol):
 
 def create_default_store() -> MobileStore:
     state_db = os.getenv("HERMES_MOBILE_STATE_DB")
+    base_store: MobileStore
     if state_db:
-        return StateDbMobileStore(state_db)
-    default_state = Path.home() / ".hermes" / "state.db"
-    if os.getenv("HERMES_MOBILE_USE_STATE_DB") == "1" and default_state.exists():
-        return StateDbMobileStore(default_state)
-    return MockMobileStore()
+        base_store = StateDbMobileStore(state_db)
+    else:
+        default_state = Path.home() / ".hermes" / "state.db"
+        if os.getenv("HERMES_MOBILE_USE_STATE_DB") == "1" and default_state.exists():
+            base_store = StateDbMobileStore(default_state)
+        else:
+            base_store = MockMobileStore()
+    if os.getenv("HERMES_MOBILE_USE_LIVE_APPROVALS") == "1":
+        return LiveApprovalMobileStore(base_store)
+    return base_store
 
 
 def create_app(store: MobileStore | None = None) -> FastAPI:

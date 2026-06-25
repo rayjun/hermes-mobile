@@ -265,6 +265,10 @@ Request:
 }
 ```
 
+### Live Hermes Approval Bridge
+
+When `HERMES_MOBILE_USE_LIVE_APPROVALS=1` is enabled in the same process/import path as Hermes Gateway, live approval ids use the `live_approval_...` prefix. Mobile `approve` resolves the oldest matching Hermes session approval as a one-time approval; mobile `deny` resolves it as deny. This mirrors gateway `/approve` / `/deny` FIFO behavior and intentionally avoids session/permanent approval scope in the mobile MVP.
+
 ## Sessions
 
 ### List Sessions
