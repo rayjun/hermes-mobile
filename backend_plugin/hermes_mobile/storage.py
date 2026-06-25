@@ -5,6 +5,7 @@ from copy import deepcopy
 from .models import (
     Approval,
     ApprovalStatus,
+    Artifact,
     RiskLevel,
     SessionSummary,
     SessionTimeline,
@@ -48,6 +49,32 @@ class MockMobileStore:
                 created_at=created_at,
                 updated_at=created_at,
             )
+        }
+        self.artifacts: dict[str, Artifact] = {
+            "art_mock_patch": Artifact(
+                id="art_mock_patch",
+                session_id="sess_mock_contribution",
+                kind="file",
+                title="mobile-api.patch",
+                summary="Patch generated for Hermes Mobile API adapter changes.",
+                mime_type="text/x-diff",
+                uri="file:///home/ubuntu/projects/hermes-mobile/mobile-api.patch",
+                size_bytes=18432,
+                metadata={"language": "diff", "repo": "rayjun/hermes-mobile"},
+                created_at=created_at,
+            ),
+            "art_mock_log": Artifact(
+                id="art_mock_log",
+                session_id="sess_mock_contribution",
+                kind="log",
+                title="gateway-smoke.log",
+                summary="Smoke test output for /mobile/v1 gateway endpoints.",
+                mime_type="text/plain",
+                uri="file:///home/ubuntu/projects/hermes-mobile/gateway-smoke.log",
+                size_bytes=2048,
+                metadata={"command": "pytest tests/test_mobile_gateway_mock.py"},
+                created_at=created_at,
+            ),
         }
         self.timelines: dict[str, SessionTimeline] = {
             "sess_mock_contribution": SessionTimeline(
@@ -98,6 +125,10 @@ class MockMobileStore:
                 ],
             )
         }
+
+    def list_artifacts(self, limit: int = 50) -> list[Artifact]:
+        artifacts = sorted(self.artifacts.values(), key=lambda artifact: artifact.created_at, reverse=True)
+        return deepcopy(artifacts[:limit])
 
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
         sessions = sorted(self.sessions.values(), key=lambda session: session.updated_at, reverse=True)

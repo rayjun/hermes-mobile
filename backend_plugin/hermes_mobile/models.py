@@ -55,6 +55,19 @@ class StatusResponse(BaseModel):
     features: dict[str, bool]
 
 
+class Artifact(BaseModel):
+    id: str
+    session_id: str | None = None
+    kind: Literal["file", "image", "log", "link", "data"]
+    title: str
+    summary: str
+    mime_type: str | None = None
+    uri: str | None = None
+    size_bytes: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
 class ToolCall(BaseModel):
     id: str
     name: str

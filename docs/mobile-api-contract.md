@@ -393,10 +393,13 @@ Artifact:
 {
   "id": "art_123",
   "session_id": "sess_123",
-  "title": "issue-analysis.md",
-  "kind": "markdown",
-  "mime_type": "text/markdown",
+  "kind": "file",
+  "title": "mobile-api.patch",
+  "summary": "Patch generated for Hermes Mobile API adapter changes.",
+  "mime_type": "text/x-diff",
+  "uri": "file:///home/ubuntu/projects/hermes-mobile/mobile-api.patch",
   "size_bytes": 18420,
+  "metadata": {"language": "diff", "repo": "rayjun/hermes-mobile"},
   "created_at": "2026-06-24T09:10:00Z"
 }
 ```

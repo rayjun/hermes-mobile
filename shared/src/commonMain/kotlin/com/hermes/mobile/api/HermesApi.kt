@@ -3,6 +3,8 @@ package com.hermes.mobile.api
 import com.hermes.mobile.models.Approval
 import com.hermes.mobile.models.ApprovalDecision
 import com.hermes.mobile.models.ApprovalsResponse
+import com.hermes.mobile.models.Artifact
+import com.hermes.mobile.models.ArtifactsResponse
 import com.hermes.mobile.models.GoalRequest
 import com.hermes.mobile.models.GoalResponse
 import com.hermes.mobile.models.NodeStatus
@@ -10,6 +12,7 @@ import com.hermes.mobile.models.SessionTimeline
 import com.hermes.mobile.models.SessionSummary
 import com.hermes.mobile.models.SessionsResponse
 import com.hermes.mobile.ui.ApprovalActionGateway
+import com.hermes.mobile.ui.ArtifactsGateway
 import com.hermes.mobile.ui.GatewayStatusProbe
 import com.hermes.mobile.ui.GoalGateway
 import com.hermes.mobile.ui.InboxGateway
@@ -29,7 +32,7 @@ import kotlinx.serialization.json.Json
 class HermesApi(
     private val baseUrl: String,
     private val client: HttpClient = defaultHttpClient(),
-) : InboxGateway, ApprovalActionGateway, GoalGateway, SessionsGateway, GatewayStatusProbe {
+) : InboxGateway, ApprovalActionGateway, GoalGateway, SessionsGateway, ArtifactsGateway, GatewayStatusProbe {
     override suspend fun status(): NodeStatus = client.get("$baseUrl/mobile/v1/status").body()
 
     override suspend fun status(baseUrl: String): NodeStatus = client.get("$baseUrl/mobile/v1/status").body()
@@ -58,6 +61,11 @@ class HermesApi(
         client.get("$baseUrl/mobile/v1/sessions").body()
 
     override suspend fun sessions(): List<SessionSummary> = sessionsResponse().sessions
+
+    suspend fun artifactsResponse(): ArtifactsResponse =
+        client.get("$baseUrl/mobile/v1/artifacts").body()
+
+    override suspend fun artifacts(): List<Artifact> = artifactsResponse().artifacts
 
     override suspend fun appendGoal(sessionId: String, request: GoalRequest): GoalResponse =
         client.post("$baseUrl/mobile/v1/sessions/$sessionId/goals") {

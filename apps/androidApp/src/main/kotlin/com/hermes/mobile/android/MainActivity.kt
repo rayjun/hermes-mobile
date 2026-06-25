@@ -32,8 +32,12 @@ import com.hermes.mobile.api.HermesApi
 import com.hermes.mobile.api.HermesEventStream
 import com.hermes.mobile.api.defaultHttpClient
 import com.hermes.mobile.models.Approval
+import com.hermes.mobile.models.Artifact
+import com.hermes.mobile.models.ArtifactKind
 import com.hermes.mobile.models.SessionSummary
 import com.hermes.mobile.ui.ApprovalActionController
+import com.hermes.mobile.ui.ArtifactsLoadState
+import com.hermes.mobile.ui.ArtifactsLoader
 import com.hermes.mobile.ui.GatewayConnectionResult
 import com.hermes.mobile.ui.GatewayConnectionState
 import com.hermes.mobile.ui.GatewaySettingsController
@@ -77,12 +81,14 @@ class MainActivity : ComponentActivity() {
                 var gatewayInput by remember { mutableStateOf(gatewaySettings.baseUrl) }
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
                 var sessionsState by remember { mutableStateOf<SessionsLoadState>(SessionsLoadState.Loading) }
+                var artifactsState by remember { mutableStateOf<ArtifactsLoadState>(ArtifactsLoadState.Loading) }
                 var selectedTab by remember { mutableStateOf(if (gatewaySettings.configured) MobileTab.Inbox else MobileTab.Settings) }
                 var commandText by remember { mutableStateOf("") }
                 var sessionDetail by remember { mutableStateOf<SessionDetailState?>(null) }
                 val api = remember(gatewaySettings.baseUrl) { HermesApi(gatewaySettings.baseUrl) }
                 val loader = remember(api) { InboxLoader(api) }
                 val sessionsLoader = remember(api) { SessionsLoader(api) }
+                val artifactsLoader = remember(api) { ArtifactsLoader(api) }
                 val actionController = remember(api) { ApprovalActionController(api) }
                 val goalController = remember(api) { GoalController(api) }
                 val sessionController = remember(goalController) { SessionDetailController(goalController) }
@@ -92,6 +98,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(gatewaySettings.baseUrl) {
                     state = loader.load()
                     sessionsState = sessionsLoader.load()
+                    artifactsState = artifactsLoader.load()
                 }
                 LaunchedEffect(sessionDetail?.timeline?.sessionId) {
                     val activeDetail = sessionDetail ?: return@LaunchedEffect
@@ -104,6 +111,7 @@ class MainActivity : ComponentActivity() {
                 HermesMobileApp(
                     state = state,
                     sessionsState = sessionsState,
+                    artifactsState = artifactsState,
                     selectedTab = selectedTab,
                     gatewaySettings = gatewaySettings,
                     gatewayInput = gatewayInput,
@@ -130,6 +138,9 @@ class MainActivity : ComponentActivity() {
                         if (tab == MobileTab.Sessions) {
                             scope.launch { sessionsState = sessionsLoader.load() }
                         }
+                        if (tab == MobileTab.Artifacts) {
+                            scope.launch { artifactsState = artifactsLoader.load() }
+                        }
                     },
                     onGatewayInputChange = { gatewayInput = it },
                     onTestGateway = {
@@ -153,6 +164,7 @@ class MainActivity : ComponentActivity() {
                             sessionDetail = null
                             state = InboxLoadState.Loading
                             sessionsState = SessionsLoadState.Loading
+                            artifactsState = ArtifactsLoadState.Loading
                             selectedTab = MobileTab.Inbox
                         } catch (_: GatewaySettingsError.InvalidUrl) {
                             gatewaySettings = gatewaySettings.copy(error = "Enter an http:// or https:// gateway URL")
@@ -186,6 +198,7 @@ class MainActivity : ComponentActivity() {
 fun HermesMobileApp(
     state: InboxLoadState,
     sessionsState: SessionsLoadState,
+    artifactsState: ArtifactsLoadState,
     selectedTab: MobileTab,
     gatewaySettings: GatewaySettingsState,
     gatewayInput: String,
@@ -237,6 +250,11 @@ fun HermesMobileApp(
                 selectedTab = selectedTab,
                 onSelectTab = onSelectTab,
                 onOpenSession = onOpenSession,
+            )
+            MobileTab.Artifacts -> ArtifactsScreen(
+                state = artifactsState,
+                selectedTab = selectedTab,
+                onSelectTab = onSelectTab,
             )
             MobileTab.Settings -> SettingsScreen(
                 gatewaySettings = gatewaySettings,
@@ -361,6 +379,60 @@ private fun ColumnScope.SessionsScreen(
 }
 
 @Composable
+private fun ColumnScope.ArtifactsScreen(
+    state: ArtifactsLoadState,
+    selectedTab: MobileTab,
+    onSelectTab: (MobileTab) -> Unit,
+) {
+    TopBar(nodeName = "Hermes", nodeStatus = "online")
+    HermesSectionHeader(SectionHeaderState("ARTIFACTS"))
+    when (state) {
+        ArtifactsLoadState.Loading -> BasicText(
+            text = "Loading artifacts…",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 13.sp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        )
+        is ArtifactsLoadState.Ready -> {
+            state.notice?.let { notice ->
+                BasicText(
+                    text = notice,
+                    style = TextStyle(color = color(HermesColors.Warning), fontSize = 11.sp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            state.artifacts.forEach { artifact -> ArtifactRow(artifact) }
+        }
+    }
+    Spacer(Modifier.weight(1f))
+    BottomNav(selected = selectedTab, onSelectTab = onSelectTab)
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun ArtifactRow(artifact: Artifact) {
+    HermesInboxItem(
+        InboxItemState(
+            title = artifact.title,
+            subtitle = "${artifact.kind.label()} · ${artifact.summary}",
+            kind = artifact.kind.inboxKind(),
+        )
+    )
+}
+
+private fun ArtifactKind.label(): String = when (this) {
+    ArtifactKind.File -> "file"
+    ArtifactKind.Image -> "image"
+    ArtifactKind.Log -> "log"
+    ArtifactKind.Link -> "link"
+    ArtifactKind.Data -> "data"
+}
+
+private fun ArtifactKind.inboxKind(): InboxItemKind = when (this) {
+    ArtifactKind.Log -> InboxItemKind.Running
+    ArtifactKind.File, ArtifactKind.Image, ArtifactKind.Link, ArtifactKind.Data -> InboxItemKind.Result
+}
+
+@Composable
 private fun BottomNav(
     selected: MobileTab,
     onSelectTab: (MobileTab) -> Unit,
@@ -383,6 +455,13 @@ private fun BottomNav(
             modifier = Modifier
                 .weight(1f)
                 .clickable { onSelectTab(MobileTab.Sessions) },
+        )
+        BasicText(
+            text = if (selected == MobileTab.Artifacts) "● Artifacts" else "○ Artifacts",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onSelectTab(MobileTab.Artifacts) },
         )
         BasicText(
             text = if (selected == MobileTab.Settings) "● Settings" else "○ Settings",
@@ -537,6 +616,7 @@ private fun TopBar(nodeName: String, nodeStatus: String) {
 enum class MobileTab {
     Inbox,
     Sessions,
+    Artifacts,
     Settings,
 }
 

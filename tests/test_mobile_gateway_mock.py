@@ -94,6 +94,21 @@ def test_session_timeline_returns_execution_log_not_chat_bubbles():
     assert thinking["tool_calls"][0]["status"] == "completed"
 
 
+def test_artifacts_endpoint_returns_session_outputs():
+    client = TestClient(create_app())
+
+    response = client.get("/mobile/v1/artifacts")
+
+    assert response.status_code == 200
+    artifacts = response.json()["artifacts"]
+    assert len(artifacts) == 2
+    assert artifacts[0]["id"] == "art_mock_patch"
+    assert artifacts[0]["session_id"] == "sess_mock_contribution"
+    assert artifacts[0]["kind"] == "file"
+    assert artifacts[0]["title"] == "mobile-api.patch"
+    assert artifacts[0]["metadata"]["language"] == "diff"
+
+
 def test_events_websocket_emits_structured_approval_event():
     client = TestClient(create_app())
     with client.websocket_connect("/mobile/v1/events") as websocket:
