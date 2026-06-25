@@ -419,8 +419,8 @@ Cron job:
 
 ```json
 {
-  "id": "cron_123",
-  "name": "mind-github-sync",
+  "id": "cron_mock_morning_report",
+  "name": "DeFi morning report",
   "schedule": "every hour",
   "enabled": true,
   "next_run_at": "2026-06-24T11:00:00Z",

@@ -34,10 +34,14 @@ import com.hermes.mobile.api.defaultHttpClient
 import com.hermes.mobile.models.Approval
 import com.hermes.mobile.models.Artifact
 import com.hermes.mobile.models.ArtifactKind
+import com.hermes.mobile.models.CronJob
+import com.hermes.mobile.models.CronRunStatus
 import com.hermes.mobile.models.SessionSummary
 import com.hermes.mobile.ui.ApprovalActionController
 import com.hermes.mobile.ui.ArtifactsLoadState
 import com.hermes.mobile.ui.ArtifactsLoader
+import com.hermes.mobile.ui.CronJobsLoadState
+import com.hermes.mobile.ui.CronJobsLoader
 import com.hermes.mobile.ui.GatewayConnectionResult
 import com.hermes.mobile.ui.GatewayConnectionState
 import com.hermes.mobile.ui.GatewaySettingsController
@@ -82,6 +86,7 @@ class MainActivity : ComponentActivity() {
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
                 var sessionsState by remember { mutableStateOf<SessionsLoadState>(SessionsLoadState.Loading) }
                 var artifactsState by remember { mutableStateOf<ArtifactsLoadState>(ArtifactsLoadState.Loading) }
+                var cronJobsState by remember { mutableStateOf<CronJobsLoadState>(CronJobsLoadState.Loading) }
                 var selectedTab by remember { mutableStateOf(if (gatewaySettings.configured) MobileTab.Inbox else MobileTab.Settings) }
                 var commandText by remember { mutableStateOf("") }
                 var sessionDetail by remember { mutableStateOf<SessionDetailState?>(null) }
@@ -89,6 +94,7 @@ class MainActivity : ComponentActivity() {
                 val loader = remember(api) { InboxLoader(api) }
                 val sessionsLoader = remember(api) { SessionsLoader(api) }
                 val artifactsLoader = remember(api) { ArtifactsLoader(api) }
+                val cronJobsLoader = remember(api) { CronJobsLoader(api) }
                 val actionController = remember(api) { ApprovalActionController(api) }
                 val goalController = remember(api) { GoalController(api) }
                 val sessionController = remember(goalController) { SessionDetailController(goalController) }
@@ -99,6 +105,7 @@ class MainActivity : ComponentActivity() {
                     state = loader.load()
                     sessionsState = sessionsLoader.load()
                     artifactsState = artifactsLoader.load()
+                    cronJobsState = cronJobsLoader.load()
                 }
                 LaunchedEffect(sessionDetail?.timeline?.sessionId) {
                     val activeDetail = sessionDetail ?: return@LaunchedEffect
@@ -112,6 +119,7 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     sessionsState = sessionsState,
                     artifactsState = artifactsState,
+                    cronJobsState = cronJobsState,
                     selectedTab = selectedTab,
                     gatewaySettings = gatewaySettings,
                     gatewayInput = gatewayInput,
@@ -141,6 +149,9 @@ class MainActivity : ComponentActivity() {
                         if (tab == MobileTab.Artifacts) {
                             scope.launch { artifactsState = artifactsLoader.load() }
                         }
+                        if (tab == MobileTab.Cron) {
+                            scope.launch { cronJobsState = cronJobsLoader.load() }
+                        }
                     },
                     onGatewayInputChange = { gatewayInput = it },
                     onTestGateway = {
@@ -165,6 +176,7 @@ class MainActivity : ComponentActivity() {
                             state = InboxLoadState.Loading
                             sessionsState = SessionsLoadState.Loading
                             artifactsState = ArtifactsLoadState.Loading
+                            cronJobsState = CronJobsLoadState.Loading
                             selectedTab = MobileTab.Inbox
                         } catch (_: GatewaySettingsError.InvalidUrl) {
                             gatewaySettings = gatewaySettings.copy(error = "Enter an http:// or https:// gateway URL")
@@ -199,6 +211,7 @@ fun HermesMobileApp(
     state: InboxLoadState,
     sessionsState: SessionsLoadState,
     artifactsState: ArtifactsLoadState,
+    cronJobsState: CronJobsLoadState,
     selectedTab: MobileTab,
     gatewaySettings: GatewaySettingsState,
     gatewayInput: String,
@@ -253,6 +266,11 @@ fun HermesMobileApp(
             )
             MobileTab.Artifacts -> ArtifactsScreen(
                 state = artifactsState,
+                selectedTab = selectedTab,
+                onSelectTab = onSelectTab,
+            )
+            MobileTab.Cron -> CronScreen(
+                state = cronJobsState,
                 selectedTab = selectedTab,
                 onSelectTab = onSelectTab,
             )
@@ -433,6 +451,62 @@ private fun ArtifactKind.inboxKind(): InboxItemKind = when (this) {
 }
 
 @Composable
+private fun ColumnScope.CronScreen(
+    state: CronJobsLoadState,
+    selectedTab: MobileTab,
+    onSelectTab: (MobileTab) -> Unit,
+) {
+    TopBar(nodeName = "Hermes", nodeStatus = "online")
+    HermesSectionHeader(SectionHeaderState("AUTOMATIONS"))
+    when (state) {
+        CronJobsLoadState.Loading -> BasicText(
+            text = "Loading automations…",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 13.sp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        )
+        is CronJobsLoadState.Ready -> {
+            state.notice?.let { notice ->
+                BasicText(
+                    text = notice,
+                    style = TextStyle(color = color(HermesColors.Warning), fontSize = 11.sp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            state.jobs.forEach { job -> CronJobRow(job) }
+        }
+    }
+    Spacer(Modifier.weight(1f))
+    BottomNav(selected = selectedTab, onSelectTab = onSelectTab)
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun CronJobRow(job: CronJob) {
+    val status = if (job.enabled) "enabled" else "paused"
+    val lastRun = job.lastRun?.let { " · last ${it.status.label()}: ${it.summary}" } ?: ""
+    HermesInboxItem(
+        InboxItemState(
+            title = job.name,
+            subtitle = "$status · ${job.schedule}$lastRun",
+            kind = job.lastRun?.status.inboxKind(),
+        )
+    )
+}
+
+private fun CronRunStatus.label(): String = when (this) {
+    CronRunStatus.Success -> "success"
+    CronRunStatus.Failed -> "failed"
+    CronRunStatus.Running -> "running"
+    CronRunStatus.Skipped -> "skipped"
+}
+
+private fun CronRunStatus?.inboxKind(): InboxItemKind = when (this) {
+    CronRunStatus.Failed -> InboxItemKind.Error
+    CronRunStatus.Running -> InboxItemKind.Running
+    CronRunStatus.Success, CronRunStatus.Skipped, null -> InboxItemKind.Result
+}
+
+@Composable
 private fun BottomNav(
     selected: MobileTab,
     onSelectTab: (MobileTab) -> Unit,
@@ -462,6 +536,13 @@ private fun BottomNav(
             modifier = Modifier
                 .weight(1f)
                 .clickable { onSelectTab(MobileTab.Artifacts) },
+        )
+        BasicText(
+            text = if (selected == MobileTab.Cron) "● Cron" else "○ Cron",
+            style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onSelectTab(MobileTab.Cron) },
         )
         BasicText(
             text = if (selected == MobileTab.Settings) "● Settings" else "○ Settings",
@@ -617,6 +698,7 @@ enum class MobileTab {
     Inbox,
     Sessions,
     Artifacts,
+    Cron,
     Settings,
 }
 

@@ -6,7 +6,7 @@ from typing import Protocol
 
 from fastapi import FastAPI, HTTPException, Query, WebSocket
 
-from .models import Approval, ApprovalDecision, ApprovalStatus, Artifact, GoalRequest, GoalResponse, SessionSummary, SessionTimeline, StatusResponse
+from .models import Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, GoalRequest, GoalResponse, SessionSummary, SessionTimeline, StatusResponse
 from .real_store import StateDbMobileStore
 from .storage import MockMobileStore
 
@@ -14,6 +14,7 @@ from .storage import MockMobileStore
 class MobileStore(Protocol):
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]: ...
     def list_artifacts(self, limit: int = 50) -> list[Artifact]: ...
+    def list_cron_jobs(self, limit: int = 50) -> list[CronJob]: ...
     def list_approvals(self, status: str | None = None) -> list[Approval]: ...
     def get_approval(self, approval_id: str) -> Approval | None: ...
     def resolve_approval(self, approval_id: str, status: ApprovalStatus) -> Approval | None: ...
@@ -51,7 +52,7 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
                 "events": True,
                 "approvals": True,
                 "session_timeline": True,
-                "cron": False,
+                "cron": True,
                 "artifacts": True,
                 "push_relay": False,
             },
@@ -89,6 +90,10 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
     @app.get("/mobile/v1/artifacts")
     def list_artifacts() -> dict[str, object]:
         return {"artifacts": store.list_artifacts()}
+
+    @app.get("/mobile/v1/cron/jobs")
+    def list_cron_jobs() -> dict[str, object]:
+        return {"jobs": store.list_cron_jobs()}
 
     @app.post("/mobile/v1/sessions", response_model=GoalResponse)
     def create_session(request: GoalRequest) -> GoalResponse:

@@ -68,6 +68,21 @@ class Artifact(BaseModel):
     created_at: datetime
 
 
+class CronRun(BaseModel):
+    status: Literal["success", "failed", "running", "skipped"]
+    summary: str
+    finished_at: datetime | None = None
+
+
+class CronJob(BaseModel):
+    id: str
+    name: str
+    schedule: str
+    enabled: bool
+    next_run_at: datetime | None = None
+    last_run: CronRun | None = None
+
+
 class ToolCall(BaseModel):
     id: str
     name: str

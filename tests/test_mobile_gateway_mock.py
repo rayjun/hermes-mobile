@@ -109,6 +109,20 @@ def test_artifacts_endpoint_returns_session_outputs():
     assert artifacts[0]["metadata"]["language"] == "diff"
 
 
+def test_cron_jobs_endpoint_returns_read_only_automations():
+    client = TestClient(create_app())
+
+    response = client.get("/mobile/v1/cron/jobs")
+
+    assert response.status_code == 200
+    jobs = response.json()["jobs"]
+    assert len(jobs) == 2
+    assert jobs[0]["id"] == "cron_mock_morning_report"
+    assert jobs[0]["name"] == "DeFi morning report"
+    assert jobs[0]["enabled"] is True
+    assert jobs[0]["last_run"]["status"] == "success"
+
+
 def test_events_websocket_emits_structured_approval_event():
     client = TestClient(create_app())
     with client.websocket_connect("/mobile/v1/events") as websocket:

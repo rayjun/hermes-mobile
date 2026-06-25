@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .models import Approval, ApprovalStatus, Artifact, SessionSummary, SessionTimeline, TimelineItem, ToolCall
+from .models import Approval, ApprovalStatus, Artifact, CronJob, SessionSummary, SessionTimeline, TimelineItem, ToolCall
 
 
 class StateDbMobileStore:
@@ -55,6 +55,9 @@ class StateDbMobileStore:
         return []
 
     def list_artifacts(self, limit: int = 50) -> list[Artifact]:
+        return []
+
+    def list_cron_jobs(self, limit: int = 50) -> list[CronJob]:
         return []
 
     def get_approval(self, approval_id: str) -> Approval | None:

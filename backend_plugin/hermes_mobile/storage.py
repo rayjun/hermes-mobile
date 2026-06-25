@@ -6,6 +6,8 @@ from .models import (
     Approval,
     ApprovalStatus,
     Artifact,
+    CronJob,
+    CronRun,
     RiskLevel,
     SessionSummary,
     SessionTimeline,
@@ -76,6 +78,32 @@ class MockMobileStore:
                 created_at=created_at,
             ),
         }
+        self.cron_jobs: dict[str, CronJob] = {
+            "cron_mock_morning_report": CronJob(
+                id="cron_mock_morning_report",
+                name="DeFi morning report",
+                schedule="0 9 * * *",
+                enabled=True,
+                next_run_at=expires_in(90),
+                last_run=CronRun(
+                    status="success",
+                    summary="Delivered concise DeFi morning report.",
+                    finished_at=created_at,
+                ),
+            ),
+            "cron_mock_memory_sync": CronJob(
+                id="cron_mock_memory_sync",
+                name="Hermes memory sync",
+                schedule="every hour",
+                enabled=True,
+                next_run_at=expires_in(60),
+                last_run=CronRun(
+                    status="success",
+                    summary="Pushed memory and skills to private repository.",
+                    finished_at=created_at,
+                ),
+            ),
+        }
         self.timelines: dict[str, SessionTimeline] = {
             "sess_mock_contribution": SessionTimeline(
                 session_id="sess_mock_contribution",
@@ -129,6 +157,9 @@ class MockMobileStore:
     def list_artifacts(self, limit: int = 50) -> list[Artifact]:
         artifacts = sorted(self.artifacts.values(), key=lambda artifact: artifact.created_at, reverse=True)
         return deepcopy(artifacts[:limit])
+
+    def list_cron_jobs(self, limit: int = 50) -> list[CronJob]:
+        return deepcopy(list(self.cron_jobs.values())[:limit])
 
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
         sessions = sorted(self.sessions.values(), key=lambda session: session.updated_at, reverse=True)

@@ -58,6 +58,17 @@ class HermesApiTest {
         assertEquals("art_patch", artifacts.first().id)
         assertEquals("mobile-api.patch", artifacts.first().title)
     }
+
+    @Test
+    fun fetchesCronJobs() = runTest {
+        val api = HermesApi("http://test", mockClient(cronJobsJson))
+
+        val jobs = api.cronJobs()
+
+        assertEquals(1, jobs.size)
+        assertEquals("cron_report", jobs.first().id)
+        assertEquals("DeFi morning report", jobs.first().name)
+    }
 }
 
 private fun mockClient(responseBody: String): HttpClient = HttpClient(MockEngine) {
@@ -142,6 +153,25 @@ private const val artifactsJson = """
       "size_bytes": 1024,
       "metadata": {"language": "diff"},
       "created_at": "2026-06-24T10:00:00Z"
+    }
+  ]
+}
+"""
+
+private const val cronJobsJson = """
+{
+  "jobs": [
+    {
+      "id": "cron_report",
+      "name": "DeFi morning report",
+      "schedule": "0 9 * * *",
+      "enabled": true,
+      "next_run_at": "2026-06-25T09:00:00Z",
+      "last_run": {
+        "status": "success",
+        "summary": "Delivered concise DeFi morning report.",
+        "finished_at": "2026-06-24T09:00:00Z"
+      }
     }
   ]
 }
