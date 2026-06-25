@@ -123,6 +123,28 @@ def test_cron_jobs_endpoint_returns_read_only_automations():
     assert jobs[0]["last_run"]["status"] == "success"
 
 
+def test_cron_job_detail_endpoint_returns_single_automation():
+    client = TestClient(create_app())
+
+    response = client.get("/mobile/v1/cron/jobs/cron_mock_morning_report")
+
+    assert response.status_code == 200
+    job = response.json()
+    assert job["id"] == "cron_mock_morning_report"
+    assert job["name"] == "DeFi morning report"
+    assert job["schedule"] == "0 9 * * *"
+    assert job["last_run"]["summary"] == "Delivered concise DeFi morning report."
+
+
+def test_cron_job_detail_endpoint_returns_404_for_unknown_job():
+    client = TestClient(create_app())
+
+    response = client.get("/mobile/v1/cron/jobs/missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "cron_job_not_found"
+
+
 def test_events_websocket_emits_structured_approval_event():
     client = TestClient(create_app())
     with client.websocket_connect("/mobile/v1/events") as websocket:

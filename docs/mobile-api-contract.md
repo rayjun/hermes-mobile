@@ -415,6 +415,8 @@ POST /mobile/v1/cron/jobs/{job_id}/resume
 PATCH /mobile/v1/cron/jobs/{job_id}
 ```
 
+MVP mobile clients currently use the cron list/detail endpoints as read-only views. Mutating endpoints (`run`, `pause`, `resume`, `PATCH`) require approval/audit policy before mobile wiring.
+
 Cron job:
 
 ```json

@@ -69,6 +69,17 @@ class HermesApiTest {
         assertEquals("cron_report", jobs.first().id)
         assertEquals("DeFi morning report", jobs.first().name)
     }
+
+    @Test
+    fun fetchesCronJobDetail() = runTest {
+        val api = HermesApi("http://test", mockClient(cronJobJson))
+
+        val job = api.cronJob("cron_report")
+
+        assertEquals("cron_report", job.id)
+        assertEquals("DeFi morning report", job.name)
+        assertEquals("Delivered concise DeFi morning report.", job.lastRun?.summary)
+    }
 }
 
 private fun mockClient(responseBody: String): HttpClient = HttpClient(MockEngine) {
@@ -174,5 +185,20 @@ private const val cronJobsJson = """
       }
     }
   ]
+}
+"""
+
+private const val cronJobJson = """
+{
+  "id": "cron_report",
+  "name": "DeFi morning report",
+  "schedule": "0 9 * * *",
+  "enabled": true,
+  "next_run_at": "2026-06-25T09:00:00Z",
+  "last_run": {
+    "status": "success",
+    "summary": "Delivered concise DeFi morning report.",
+    "finished_at": "2026-06-24T09:00:00Z"
+  }
 }
 """

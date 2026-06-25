@@ -60,6 +60,9 @@ class StateDbMobileStore:
     def list_cron_jobs(self, limit: int = 50) -> list[CronJob]:
         return []
 
+    def get_cron_job(self, job_id: str) -> CronJob | None:
+        return None
+
     def get_approval(self, approval_id: str) -> Approval | None:
         return None
 

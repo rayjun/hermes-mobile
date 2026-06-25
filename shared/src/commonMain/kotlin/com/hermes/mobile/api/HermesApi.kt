@@ -75,6 +75,9 @@ class HermesApi(
 
     override suspend fun cronJobs(): List<CronJob> = cronJobsResponse().jobs
 
+    override suspend fun cronJob(jobId: String): CronJob =
+        client.get("$baseUrl/mobile/v1/cron/jobs/$jobId").body()
+
     override suspend fun appendGoal(sessionId: String, request: GoalRequest): GoalResponse =
         client.post("$baseUrl/mobile/v1/sessions/$sessionId/goals") {
             contentType(ContentType.Application.Json)

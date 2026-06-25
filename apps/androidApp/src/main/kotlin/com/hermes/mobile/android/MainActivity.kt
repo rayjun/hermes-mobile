@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                 var selectedTab by remember { mutableStateOf(if (gatewaySettings.configured) MobileTab.Inbox else MobileTab.Settings) }
                 var commandText by remember { mutableStateOf("") }
                 var sessionDetail by remember { mutableStateOf<SessionDetailState?>(null) }
+                var cronJobDetail by remember { mutableStateOf<CronJob?>(null) }
                 val api = remember(gatewaySettings.baseUrl) { HermesApi(gatewaySettings.baseUrl) }
                 val loader = remember(api) { InboxLoader(api) }
                 val sessionsLoader = remember(api) { SessionsLoader(api) }
@@ -124,6 +125,7 @@ class MainActivity : ComponentActivity() {
                     gatewaySettings = gatewaySettings,
                     gatewayInput = gatewayInput,
                     sessionDetail = sessionDetail,
+                    cronJobDetail = cronJobDetail,
                     commandText = commandText,
                     onCommandTextChange = { commandText = it },
                     onSendGoal = {
@@ -138,11 +140,17 @@ class MainActivity : ComponentActivity() {
                     },
                     onBackToInbox = {
                         sessionDetail = null
+                        cronJobDetail = null
                         selectedTab = MobileTab.Inbox
+                    },
+                    onBackToCron = {
+                        cronJobDetail = null
+                        selectedTab = MobileTab.Cron
                     },
                     onSelectTab = { tab ->
                         selectedTab = tab
                         sessionDetail = null
+                        cronJobDetail = null
                         if (tab == MobileTab.Sessions) {
                             scope.launch { sessionsState = sessionsLoader.load() }
                         }
@@ -173,6 +181,7 @@ class MainActivity : ComponentActivity() {
                             gatewaySettings = next
                             gatewayInput = next.baseUrl
                             sessionDetail = null
+                            cronJobDetail = null
                             state = InboxLoadState.Loading
                             sessionsState = SessionsLoadState.Loading
                             artifactsState = ArtifactsLoadState.Loading
@@ -186,6 +195,12 @@ class MainActivity : ComponentActivity() {
                         scope.launch {
                             sessionDetail = sessionsLoader.openSession(session.id)
                             selectedTab = MobileTab.Sessions
+                        }
+                    },
+                    onOpenCronJob = { job ->
+                        scope.launch {
+                            cronJobDetail = cronJobsLoader.openCronJob(job.id)
+                            selectedTab = MobileTab.Cron
                         }
                     },
                     onApprove = { approval ->
@@ -216,15 +231,18 @@ fun HermesMobileApp(
     gatewaySettings: GatewaySettingsState,
     gatewayInput: String,
     sessionDetail: SessionDetailState?,
+    cronJobDetail: CronJob?,
     commandText: String,
     onCommandTextChange: (String) -> Unit,
     onSendGoal: () -> Unit,
     onBackToInbox: () -> Unit,
+    onBackToCron: () -> Unit,
     onSelectTab: (MobileTab) -> Unit,
     onGatewayInputChange: (String) -> Unit,
     onTestGateway: () -> Unit,
     onSaveGateway: () -> Unit,
     onOpenSession: (SessionSummary) -> Unit,
+    onOpenCronJob: (CronJob) -> Unit,
     onApprove: (Approval) -> Unit,
     onDeny: (Approval) -> Unit,
 ) {
@@ -235,6 +253,7 @@ fun HermesMobileApp(
             .padding(top = 20.dp),
     ) {
         val detail = sessionDetail
+        val cronDetail = cronJobDetail
         if (detail != null) {
             SessionDetailScreen(
                 detail = detail,
@@ -242,6 +261,11 @@ fun HermesMobileApp(
                 onCommandTextChange = onCommandTextChange,
                 onSendGoal = onSendGoal,
                 onBackToInbox = onBackToInbox,
+            )
+        } else if (cronDetail != null) {
+            CronJobDetailScreen(
+                job = cronDetail,
+                onBackToCron = onBackToCron,
             )
         } else when (selectedTab) {
             MobileTab.Inbox -> when (state) {
@@ -273,6 +297,7 @@ fun HermesMobileApp(
                 state = cronJobsState,
                 selectedTab = selectedTab,
                 onSelectTab = onSelectTab,
+                onOpenCronJob = onOpenCronJob,
             )
             MobileTab.Settings -> SettingsScreen(
                 gatewaySettings = gatewaySettings,
@@ -455,6 +480,7 @@ private fun ColumnScope.CronScreen(
     state: CronJobsLoadState,
     selectedTab: MobileTab,
     onSelectTab: (MobileTab) -> Unit,
+    onOpenCronJob: (CronJob) -> Unit,
 ) {
     TopBar(nodeName = "Hermes", nodeStatus = "online")
     HermesSectionHeader(SectionHeaderState("AUTOMATIONS"))
@@ -472,7 +498,7 @@ private fun ColumnScope.CronScreen(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 )
             }
-            state.jobs.forEach { job -> CronJobRow(job) }
+            state.jobs.forEach { job -> CronJobRow(job, onOpenCronJob) }
         }
     }
     Spacer(Modifier.weight(1f))
@@ -481,7 +507,7 @@ private fun ColumnScope.CronScreen(
 }
 
 @Composable
-private fun CronJobRow(job: CronJob) {
+private fun CronJobRow(job: CronJob, onOpenCronJob: (CronJob) -> Unit) {
     val status = if (job.enabled) "enabled" else "paused"
     val lastRun = job.lastRun?.let { " · last ${it.status.label()}: ${it.summary}" } ?: ""
     HermesInboxItem(
@@ -489,8 +515,57 @@ private fun CronJobRow(job: CronJob) {
             title = job.name,
             subtitle = "$status · ${job.schedule}$lastRun",
             kind = job.lastRun?.status.inboxKind(),
+        ),
+        modifier = Modifier.clickable { onOpenCronJob(job) },
+    )
+}
+
+@Composable
+private fun ColumnScope.CronJobDetailScreen(
+    job: CronJob,
+    onBackToCron: () -> Unit,
+) {
+    BasicText(
+        text = "‹ Cron                         ${job.name}",
+        style = TextStyle(
+            color = color(HermesColors.TextPrimary),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        ),
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .clickable(onClick = onBackToCron),
+    )
+    HermesSectionHeader(SectionHeaderState("AUTOMATION"))
+    HermesInboxItem(
+        InboxItemState(
+            title = if (job.enabled) "Enabled" else "Paused",
+            subtitle = "Schedule · ${job.schedule}",
+            kind = if (job.enabled) InboxItemKind.Running else InboxItemKind.Result,
         )
     )
+    job.nextRunAt?.let { nextRun ->
+        HermesInboxItem(
+            InboxItemState(
+                title = "Next run",
+                subtitle = nextRun.toString(),
+                kind = InboxItemKind.Result,
+            )
+        )
+    }
+    job.lastRun?.let { lastRun ->
+        HermesInboxItem(
+            InboxItemState(
+                title = "Last ${lastRun.status.label()}",
+                subtitle = lastRun.summary,
+                kind = lastRun.status.inboxKind(),
+                timestamp = lastRun.finishedAt?.toString(),
+            )
+        )
+    }
+    Spacer(Modifier.weight(1f))
+    BottomNav(selected = MobileTab.Cron, onSelectTab = { if (it == MobileTab.Cron) onBackToCron() })
+    Spacer(Modifier.height(6.dp))
 }
 
 private fun CronRunStatus.label(): String = when (this) {

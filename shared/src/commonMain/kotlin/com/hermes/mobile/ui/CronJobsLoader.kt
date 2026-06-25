@@ -7,6 +7,7 @@ import kotlinx.datetime.Instant
 
 interface CronJobsGateway {
     suspend fun cronJobs(): List<CronJob>
+    suspend fun cronJob(jobId: String): CronJob
 }
 
 sealed interface CronJobsLoadState {
@@ -31,6 +32,8 @@ class CronJobsLoader(
             usingFallback = true,
         )
     }
+
+    suspend fun openCronJob(jobId: String): CronJob = gateway.cronJob(jobId)
 }
 
 private fun fallbackJob(): CronJob = CronJob(

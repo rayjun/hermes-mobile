@@ -161,6 +161,10 @@ class MockMobileStore:
     def list_cron_jobs(self, limit: int = 50) -> list[CronJob]:
         return deepcopy(list(self.cron_jobs.values())[:limit])
 
+    def get_cron_job(self, job_id: str) -> CronJob | None:
+        job = self.cron_jobs.get(job_id)
+        return deepcopy(job) if job else None
+
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
         sessions = sorted(self.sessions.values(), key=lambda session: session.updated_at, reverse=True)
         return deepcopy(sessions[:limit])

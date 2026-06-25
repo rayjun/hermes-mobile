@@ -35,6 +35,18 @@ class CronJobsLoaderTest {
         assertEquals("Gateway unavailable · showing sample automations", state.notice)
         assertEquals("Sample automation", state.jobs.first().name)
     }
+
+    @Test
+    fun opensCronJobDetailFromGateway() = runTest {
+        val loader = CronJobsLoader(FakeCronJobsGateway())
+
+        val detail = loader.openCronJob("cron_report")
+
+        assertEquals("cron_report", detail.id)
+        assertEquals("DeFi morning report", detail.name)
+        assertEquals("0 9 * * *", detail.schedule)
+        assertEquals("Delivered concise DeFi morning report.", detail.lastRun?.summary)
+    }
 }
 
 private class FakeCronJobsGateway : CronJobsGateway {
@@ -64,8 +76,11 @@ private class FakeCronJobsGateway : CronJobsGateway {
             ),
         ),
     )
+
+    override suspend fun cronJob(jobId: String): CronJob = cronJobs().first { it.id == jobId }
 }
 
 private class FailingCronJobsGateway : CronJobsGateway {
     override suspend fun cronJobs(): List<CronJob> = error("offline")
+    override suspend fun cronJob(jobId: String): CronJob = error("offline")
 }
