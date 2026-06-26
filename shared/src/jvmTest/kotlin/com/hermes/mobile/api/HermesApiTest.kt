@@ -7,6 +7,7 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
@@ -17,6 +18,26 @@ import kotlin.test.assertEquals
 
 class HermesApiTest {
     @Test
+    fun startsPairingAndCompletesPairing() = runTest {
+        val api = HermesApi("http://test", queueMockClient(pairStartJson, pairCompleteJson))
+
+        val start = api.startPairing()
+        val complete = api.completePairing(
+            code = start.code,
+            deviceName = "Ray's Android",
+            platform = "android",
+            publicKey = "test-public-key",
+        )
+
+        assertEquals("pair_test", start.pairingId)
+        assertEquals("834912", start.code)
+        assertEquals("hermes://pair?url=http://test&code=834912&fingerprint=mock", start.qrPayload)
+        assertEquals("dev_test", complete.deviceId)
+        assertEquals("hmob_test_token", complete.deviceToken)
+        assertEquals(true, complete.capabilities["approvals"])
+    }
+
+    @Test
     fun fetchesPendingApprovals() = runTest {
         val api = HermesApi("http://test", mockClient(approvalsJson))
 
@@ -25,6 +46,33 @@ class HermesApiTest {
         assertEquals(1, approvals.size)
         assertEquals("appr_mock_git_push", approvals.first().id)
         assertEquals(RiskLevel.High, approvals.first().risk)
+    }
+
+    @Test
+    fun attachesBearerTokenToResourceRequests() = runTest {
+        val api = HermesApi("http://test", bearerAssertingClient(approvalsJson), deviceToken = "hmob_test_token")
+
+        val approvals = api.pendingApprovals()
+
+        assertEquals(1, approvals.size)
+    }
+
+    @Test
+    fun fetchesPairedDevices() = runTest {
+        val api = HermesApi("http://test", methodAssertingClient(HttpMethod.Get, "/mobile/v1/devices", devicesJson), deviceToken = "hmob_test_token")
+
+        val devices = api.devices()
+
+        assertEquals(1, devices.size)
+        assertEquals("dev_test", devices.first().id)
+        assertEquals("Ray's Android", devices.first().name)
+    }
+
+    @Test
+    fun revokesPairedDevice() = runTest {
+        val api = HermesApi("http://test", methodAssertingClient(HttpMethod.Delete, "/mobile/v1/devices/dev_test", ""), deviceToken = "hmob_test_token")
+
+        api.revokeDevice("dev_test")
     }
 
     @Test
@@ -99,6 +147,100 @@ private fun mockClient(responseBody: String): HttpClient = HttpClient(MockEngine
         }
     }
 }
+
+private fun bearerAssertingClient(responseBody: String): HttpClient = HttpClient(MockEngine) {
+    install(ContentNegotiation) {
+        json(Json {
+            ignoreUnknownKeys = true
+            explicitNulls = false
+        })
+    }
+    engine {
+        addHandler { request ->
+            assertEquals("Bearer hmob_test_token", request.headers[HttpHeaders.Authorization])
+            respond(
+                content = responseBody,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+    }
+}
+
+private fun methodAssertingClient(method: HttpMethod, path: String, responseBody: String): HttpClient = HttpClient(MockEngine) {
+    install(ContentNegotiation) {
+        json(Json {
+            ignoreUnknownKeys = true
+            explicitNulls = false
+        })
+    }
+    engine {
+        addHandler { request ->
+            assertEquals(method, request.method)
+            assertEquals(path, request.url.encodedPath)
+            assertEquals("Bearer hmob_test_token", request.headers[HttpHeaders.Authorization])
+            respond(
+                content = responseBody,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+    }
+}
+
+private fun queueMockClient(vararg responseBodies: String): HttpClient = HttpClient(MockEngine) {
+    install(ContentNegotiation) {
+        json(Json {
+            ignoreUnknownKeys = true
+            explicitNulls = false
+        })
+    }
+    engine {
+        val bodies = ArrayDeque(responseBodies.toList())
+        addHandler {
+            respond(
+                content = bodies.removeFirst(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+    }
+}
+
+private const val pairStartJson = """
+{
+  "pairing_id": "pair_test",
+  "code": "834912",
+  "expires_at": "2026-06-24T10:15:00Z",
+  "qr_payload": "hermes://pair?url=http://test&code=834912&fingerprint=mock"
+}
+"""
+
+private const val pairCompleteJson = """
+{
+  "device_id": "dev_test",
+  "device_token": "hmob_test_token",
+  "capabilities": {
+    "approvals": true,
+    "sessions": true,
+    "cron": true,
+    "artifacts": true
+  }
+}
+"""
+
+private const val devicesJson = """
+{
+  "devices": [
+    {
+      "id": "dev_test",
+      "name": "Ray's Android",
+      "platform": "android",
+      "created_at": "2026-06-24T10:15:00Z"
+    }
+  ]
+}
+"""
 
 private const val approvalsJson = """
 {

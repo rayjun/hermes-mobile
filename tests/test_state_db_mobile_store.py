@@ -10,6 +10,15 @@ from backend_plugin.hermes_mobile.real_store import StateDbMobileStore
 from backend_plugin.hermes_mobile.server import create_app, create_default_store
 
 
+def auth_headers(client: TestClient) -> dict[str, str]:
+    start = client.post("/mobile/v1/pair/start").json()
+    complete = client.post(
+        "/mobile/v1/pair/complete",
+        json={"code": start["code"], "device_name": "Ray's Android", "platform": "android"},
+    ).json()
+    return {"Authorization": f"Bearer {complete['device_token']}"}
+
+
 def create_state_db(path: Path) -> None:
     con = sqlite3.connect(path)
     con.executescript(
@@ -142,7 +151,7 @@ def test_sessions_endpoint_can_use_real_state_store(tmp_path: Path):
     store = StateDbMobileStore(db_path)
     client = TestClient(create_app(store=store))
 
-    response = client.get("/mobile/v1/sessions")
+    response = client.get("/mobile/v1/sessions", headers=auth_headers(client))
 
     assert response.status_code == 200
     body = response.json()

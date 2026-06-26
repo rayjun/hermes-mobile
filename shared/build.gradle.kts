@@ -9,9 +9,17 @@ plugins {
 kotlin {
     androidTarget()
     jvm()
-    iosX64()
-    iosArm64()
-    iosSimulatorArm64()
+    val iosTargets = listOf(
+        iosX64(),
+        iosArm64(),
+        iosSimulatorArm64(),
+    )
+    iosTargets.forEach { target ->
+        target.binaries.framework {
+            baseName = "shared"
+            isStatic = true
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {
@@ -30,6 +38,9 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation("io.ktor:ktor-client-mock:3.1.3")
+        }
+        iosMain.dependencies {
+            implementation("io.ktor:ktor-client-darwin:3.1.3")
         }
     }
 }

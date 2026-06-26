@@ -1,9 +1,10 @@
 package com.hermes.mobile.android
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -49,6 +50,9 @@ import com.hermes.mobile.ui.GatewaySettingsError
 import com.hermes.mobile.ui.GatewaySettingsState
 import com.hermes.mobile.ui.GoalController
 import com.hermes.mobile.ui.InboxLoadState
+import com.hermes.mobile.ui.PairingController
+import com.hermes.mobile.ui.PairingState
+import com.hermes.mobile.ui.PairingStatus
 import com.hermes.mobile.ui.SessionDetailController
 import com.hermes.mobile.ui.SessionDetailState
 import com.hermes.mobile.ui.SessionLiveEventController
@@ -71,6 +75,8 @@ import kotlinx.coroutines.launch
 
 private const val GatewayPrefsName = "hermes_mobile_gateway"
 private const val GatewayBaseUrlKey = "gateway_base_url"
+private const val DeviceIdKey = "device_id"
+private const val DeviceTokenKey = "device_token"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,11 +84,34 @@ class MainActivity : ComponentActivity() {
         setContent {
             HermesTheme {
                 val gatewaySettingsController = remember { GatewaySettingsController() }
-                val gatewayPrefs = remember { getSharedPreferences(GatewayPrefsName, Context.MODE_PRIVATE) }
+                val gatewayPrefs = remember {
+                    val masterKey = MasterKey.Builder(this)
+                        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                        .build()
+                    EncryptedSharedPreferences.create(
+                        this,
+                        GatewayPrefsName,
+                        masterKey,
+                        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+                    )
+                }
                 var gatewaySettings by remember {
                     mutableStateOf(gatewaySettingsController.initialState(gatewayPrefs.getString(GatewayBaseUrlKey, null)))
                 }
                 var gatewayInput by remember { mutableStateOf(gatewaySettings.baseUrl) }
+                var pairingCodeInput by remember { mutableStateOf("") }
+                var pairingDeviceName by remember { mutableStateOf("Ray's Android") }
+                var pairingState by remember {
+                    mutableStateOf(
+                        PairingState(
+                            status = if (gatewayPrefs.getString(DeviceTokenKey, null).isNullOrBlank()) PairingStatus.Idle else PairingStatus.Paired,
+                            deviceId = gatewayPrefs.getString(DeviceIdKey, null),
+                            deviceToken = gatewayPrefs.getString(DeviceTokenKey, null),
+                            message = gatewayPrefs.getString(DeviceIdKey, null)?.let { "Paired $it" },
+                        )
+                    )
+                }
                 var state by remember { mutableStateOf<InboxLoadState>(InboxLoadState.Loading) }
                 var sessionsState by remember { mutableStateOf<SessionsLoadState>(SessionsLoadState.Loading) }
                 var artifactsState by remember { mutableStateOf<ArtifactsLoadState>(ArtifactsLoadState.Loading) }
@@ -91,13 +120,16 @@ class MainActivity : ComponentActivity() {
                 var commandText by remember { mutableStateOf("") }
                 var sessionDetail by remember { mutableStateOf<SessionDetailState?>(null) }
                 var cronJobDetail by remember { mutableStateOf<CronJob?>(null) }
-                val api = remember(gatewaySettings.baseUrl) { HermesApi(gatewaySettings.baseUrl) }
+                val api = remember(gatewaySettings.baseUrl, pairingState.deviceToken) {
+                    HermesApi(gatewaySettings.baseUrl, deviceToken = pairingState.deviceToken)
+                }
                 val loader = remember(api) { InboxLoader(api) }
                 val sessionsLoader = remember(api) { SessionsLoader(api) }
                 val artifactsLoader = remember(api) { ArtifactsLoader(api) }
                 val cronJobsLoader = remember(api) { CronJobsLoader(api) }
                 val actionController = remember(api) { ApprovalActionController(api) }
                 val goalController = remember(api) { GoalController(api) }
+                val pairingController = remember(api) { PairingController(api) }
                 val sessionController = remember(goalController) { SessionDetailController(goalController) }
                 val eventStream = remember(gatewaySettings.baseUrl) { HermesEventStream(gatewaySettings.baseUrl, defaultHttpClient()) }
                 val liveEventController = remember { SessionLiveEventController() }
@@ -124,6 +156,9 @@ class MainActivity : ComponentActivity() {
                     selectedTab = selectedTab,
                     gatewaySettings = gatewaySettings,
                     gatewayInput = gatewayInput,
+                    pairingCodeInput = pairingCodeInput,
+                    pairingDeviceName = pairingDeviceName,
+                    pairingState = pairingState,
                     sessionDetail = sessionDetail,
                     cronJobDetail = cronJobDetail,
                     commandText = commandText,
@@ -162,6 +197,34 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onGatewayInputChange = { gatewayInput = it },
+                    onPairingCodeChange = { pairingCodeInput = it },
+                    onPairingDeviceNameChange = { pairingDeviceName = it },
+                    onStartPairing = {
+                        scope.launch {
+                            pairingState = pairingController.start()
+                            pairingState.code?.let { pairingCodeInput = it }
+                        }
+                    },
+                    onCompletePairing = {
+                        scope.launch {
+                            val paired = pairingController.complete(pairingCodeInput, pairingDeviceName, "android")
+                            pairingState = paired
+                            if (paired.status == PairingStatus.Paired) {
+                                gatewayPrefs.edit()
+                                    .putString(DeviceIdKey, paired.deviceId)
+                                    .putString(DeviceTokenKey, paired.deviceToken)
+                                    .apply()
+                            }
+                        }
+                    },
+                    onClearPairing = {
+                        scope.launch {
+                            pairingState.deviceId?.let { deviceId -> runCatching { api.revokeDevice(deviceId) } }
+                            gatewayPrefs.edit().remove(DeviceIdKey).remove(DeviceTokenKey).apply()
+                            pairingState = PairingState(message = "Pairing cleared")
+                            pairingCodeInput = ""
+                        }
+                    },
                     onTestGateway = {
                         gatewaySettings = gatewaySettings.copy(
                             connection = GatewayConnectionResult(GatewayConnectionState.Testing, "Testing gateway…"),
@@ -177,7 +240,14 @@ class MainActivity : ComponentActivity() {
                     onSaveGateway = {
                         try {
                             val next = gatewaySettingsController.save(gatewayInput)
-                            gatewayPrefs.edit().putString(GatewayBaseUrlKey, next.baseUrl).apply()
+                            val gatewayChanged = next.baseUrl != gatewaySettings.baseUrl
+                            val editor = gatewayPrefs.edit().putString(GatewayBaseUrlKey, next.baseUrl)
+                            if (gatewayChanged) {
+                                editor.remove(DeviceIdKey).remove(DeviceTokenKey)
+                                pairingState = PairingState()
+                                pairingCodeInput = ""
+                            }
+                            editor.apply()
                             gatewaySettings = next
                             gatewayInput = next.baseUrl
                             sessionDetail = null
@@ -230,6 +300,9 @@ fun HermesMobileApp(
     selectedTab: MobileTab,
     gatewaySettings: GatewaySettingsState,
     gatewayInput: String,
+    pairingCodeInput: String,
+    pairingDeviceName: String,
+    pairingState: PairingState,
     sessionDetail: SessionDetailState?,
     cronJobDetail: CronJob?,
     commandText: String,
@@ -239,6 +312,11 @@ fun HermesMobileApp(
     onBackToCron: () -> Unit,
     onSelectTab: (MobileTab) -> Unit,
     onGatewayInputChange: (String) -> Unit,
+    onPairingCodeChange: (String) -> Unit,
+    onPairingDeviceNameChange: (String) -> Unit,
+    onStartPairing: () -> Unit,
+    onCompletePairing: () -> Unit,
+    onClearPairing: () -> Unit,
     onTestGateway: () -> Unit,
     onSaveGateway: () -> Unit,
     onOpenSession: (SessionSummary) -> Unit,
@@ -302,8 +380,16 @@ fun HermesMobileApp(
             MobileTab.Settings -> SettingsScreen(
                 gatewaySettings = gatewaySettings,
                 gatewayInput = gatewayInput,
+                pairingCodeInput = pairingCodeInput,
+                pairingDeviceName = pairingDeviceName,
+                pairingState = pairingState,
                 selectedTab = selectedTab,
                 onGatewayInputChange = onGatewayInputChange,
+                onPairingCodeChange = onPairingCodeChange,
+                onPairingDeviceNameChange = onPairingDeviceNameChange,
+                onStartPairing = onStartPairing,
+                onCompletePairing = onCompletePairing,
+                onClearPairing = onClearPairing,
                 onTestGateway = onTestGateway,
                 onSaveGateway = onSaveGateway,
                 onSelectTab = onSelectTab,
@@ -633,8 +719,16 @@ private fun BottomNav(
 private fun ColumnScope.SettingsScreen(
     gatewaySettings: GatewaySettingsState,
     gatewayInput: String,
+    pairingCodeInput: String,
+    pairingDeviceName: String,
+    pairingState: PairingState,
     selectedTab: MobileTab,
     onGatewayInputChange: (String) -> Unit,
+    onPairingCodeChange: (String) -> Unit,
+    onPairingDeviceNameChange: (String) -> Unit,
+    onStartPairing: () -> Unit,
+    onCompletePairing: () -> Unit,
+    onClearPairing: () -> Unit,
     onTestGateway: () -> Unit,
     onSaveGateway: () -> Unit,
     onSelectTab: (MobileTab) -> Unit,
@@ -704,6 +798,60 @@ private fun ColumnScope.SettingsScreen(
         style = TextStyle(color = color(HermesColors.TextSecondary), fontSize = 11.sp),
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
     )
+    HermesSectionHeader(SectionHeaderState("PAIRING"))
+    pairingState.message?.let { message ->
+        BasicText(
+            text = message,
+            style = TextStyle(
+                color = color(if (pairingState.status == PairingStatus.Paired) HermesColors.Success else HermesColors.TextSecondary),
+                fontSize = 11.sp,
+            ),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        )
+    }
+    HermesCommandBar(
+        state = CommandBarState(
+            placeholder = "Device name",
+            text = pairingDeviceName,
+            canSend = pairingDeviceName.isNotBlank(),
+        ),
+        onTextChange = onPairingDeviceNameChange,
+        onSend = onStartPairing,
+    )
+    HermesCommandBar(
+        state = CommandBarState(
+            placeholder = "Pairing code",
+            text = pairingCodeInput,
+            canSend = pairingCodeInput.isNotBlank(),
+        ),
+        onTextChange = onPairingCodeChange,
+        onSend = onCompletePairing,
+    )
+    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+        BasicText(
+            text = "Start pairing",
+            style = TextStyle(color = color(HermesColors.Blue), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onStartPairing() },
+        )
+        BasicText(
+            text = "Complete pairing",
+            style = TextStyle(color = color(HermesColors.Blue), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onCompletePairing() },
+        )
+    }
+    if (pairingState.status == PairingStatus.Paired) {
+        BasicText(
+            text = "Revoke this device",
+            style = TextStyle(color = color(HermesColors.Error), fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .clickable { onClearPairing() },
+        )
+    }
     Spacer(Modifier.weight(1f))
     BottomNav(selected = selectedTab, onSelectTab = onSelectTab)
     Spacer(Modifier.height(6.dp))

@@ -4,14 +4,89 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from secrets import randbelow, token_urlsafe
 from typing import Any
 
-from .models import Approval, ApprovalStatus, Artifact, CronJob, SessionSummary, SessionTimeline, TimelineItem, ToolCall
+from .models import Approval, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, SessionSummary, SessionTimeline, TimelineItem, ToolCall, expires_in
 
 
 class StateDbMobileStore:
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = Path(db_path)
+        self.pending_pairings: dict[str, PairingStartResponse] = {}
+        self.device_tokens: dict[str, DeviceInfo] = {}
+        self.approval_audit_log: list[dict[str, object]] = []
+
+    def start_pairing(self) -> PairingStartResponse:
+        pairing_id = f"pair_{token_urlsafe(8)}"
+        code = f"{randbelow(1_000_000):06d}"
+        while code in self.pending_pairings:
+            code = f"{randbelow(1_000_000):06d}"
+        response = PairingStartResponse(
+            pairing_id=pairing_id,
+            code=code,
+            expires_at=expires_in(10),
+            qr_payload=f"hermes://pair?url=http://127.0.0.1:8765&code={code}&fingerprint=state-db",
+        )
+        self.pending_pairings[code] = response
+        return response
+
+    def complete_pairing(self, request: PairingCompleteRequest) -> PairingCompleteResponse | None:
+        pairing = self.pending_pairings.pop(request.code, None)
+        if not pairing:
+            return None
+        if pairing.expires_at <= datetime.now(UTC):
+            raise PairingCodeExpired()
+        device_id = f"dev_{token_urlsafe(8)}"
+        device_token = f"hmob_{token_urlsafe(32)}"
+        self.device_tokens[device_token] = DeviceInfo(
+            id=device_id,
+            name=request.device_name,
+            platform=request.platform,
+            created_at=datetime.now(UTC),
+        )
+        return PairingCompleteResponse(
+            device_id=device_id,
+            device_token=device_token,
+            capabilities={
+                "approvals": True,
+                "sessions": True,
+                "cron": True,
+                "artifacts": True,
+                "events": True,
+            },
+        )
+
+    def device_id_for_token(self, token: str) -> str | None:
+        device = self.device_tokens.get(token)
+        return device.id if device else None
+
+    def device_token_for_id(self, device_id: str) -> str | None:
+        for token, device in self.device_tokens.items():
+            if device.id == device_id:
+                return token
+        return None
+
+    def list_devices(self) -> list[DeviceInfo]:
+        return sorted(self.device_tokens.values(), key=lambda device: device.created_at, reverse=True)
+
+    def revoke_device(self, device_id: str) -> bool:
+        for token, device in list(self.device_tokens.items()):
+            if device.id == device_id:
+                del self.device_tokens[token]
+                return True
+        return False
+
+    def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
+        self.approval_audit_log.append(
+            {
+                "approval_id": approval_id,
+                "device_id": device_id,
+                "decision": decision.value,
+                "comment": comment,
+                "created_at": datetime.now(UTC),
+            }
+        )
 
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
         with self._connect() as con:

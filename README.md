@@ -29,9 +29,10 @@ It is not a chatbot UI and not a mobile runtime for running agents on-device. Th
 
 This repo now contains:
 
-- `backend_plugin/hermes_mobile/` — FastAPI Mobile Gateway adapter with mock mode plus read-only Hermes `state.db` mode for real session listing/timeline inspection; includes status, approvals, approval decisions, goal/session creation, session timeline, artifacts, read-only cron jobs, and WebSocket event stream including session timeline updates. Optional `HERMES_MOBILE_USE_LIVE_APPROVALS=1` bridges the oldest blocking in-process Hermes `tools.approval` request per session into the mobile approvals API.
-- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, WebSocket event stream, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, approval action controller, goal/session controller, session detail controller, sessions loader, artifacts loader, cron jobs loader, live session event reducer, and shared Compose components for section headers, inbox rows, approval cards, approve/deny actions, and editable command bar.
-- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` gateway data with an offline sample fallback, approve/deny actions, Sessions, Artifacts, and Cron tabs backed by `/mobile/v1/sessions`, `/mobile/v1/artifacts`, and `/mobile/v1/cron/jobs`, read-only Cron job details, a Settings tab for saving the Gateway URL, and a `Start with a goal` command bar that opens a session detail timeline, continues the same session on follow-up goals, and applies live WebSocket timeline updates.
+- `backend_plugin/hermes_mobile/` — FastAPI Mobile Gateway adapter with mock mode plus read-only Hermes `state.db` mode for real session listing/timeline inspection; includes status, pairing start/complete, bearer-token protection and optional HMAC `HermesDevice` signed auth for mobile resource/action endpoints, device list/revoke, approval audit entries, approvals, approval decisions, goal/session creation, session timeline, artifacts, read-only cron jobs, and WebSocket event stream including session timeline updates. Optional `HERMES_MOBILE_USE_LIVE_APPROVALS=1` bridges the oldest blocking in-process Hermes `tools.approval` request per session into the mobile approvals API.
+- `shared/` — initial KMP shared module skeleton with serializable models, Ktor API client, WebSocket event stream, repositories, Compose runtime theme tokens, Inbox reducer state, Approval card state, approval action controller, pairing controller, goal/session controller, session detail controller, sessions loader, artifacts loader, cron jobs loader, live session event reducer, and shared Compose components for section headers, inbox rows, approval cards, approve/deny actions, and editable command bar.
+- `apps/androidApp/` — Android Compose shell rendering the Desktop-consistent Inbox using `/mobile/v1` gateway data with an offline sample fallback, approve/deny actions, Sessions, Artifacts, and Cron tabs backed by `/mobile/v1/sessions`, `/mobile/v1/artifacts`, and `/mobile/v1/cron/jobs`, read-only Cron job details, a Settings tab for saving the Gateway URL and pairing a device, and a `Start with a goal` command bar that opens a session detail timeline, continues the same session on follow-up goals, and applies live WebSocket timeline updates.
+- `apps/iosApp/` — installable SwiftUI iOS shell with Gateway and Pairing settings placeholders. The Xcode target embeds the KMP `shared` framework via `:shared:embedAndSignAppleFrameworkForXcode`; full iOS networking/pairing wiring is the next slice.
 - `tests/` — pytest coverage for the mock gateway API.
 
 Run KMP shared build/tests:
@@ -47,6 +48,22 @@ Run Android debug build:
 ./gradlew :apps:androidApp:assembleDebug --no-daemon
 ```
 
+Run and install the iOS shell on macOS:
+
+```bash
+open apps/iosApp/iosApp.xcodeproj
+# In Xcode: select the iosApp scheme, choose a simulator or connected iPhone,
+# set your Team under Signing & Capabilities for a physical device, then Run.
+```
+
+The iOS target runs this build phase before compiling the app:
+
+```bash
+./gradlew :shared:embedAndSignAppleFrameworkForXcode
+```
+
+This embeds the KMP `shared` framework for the selected simulator/device SDK. Real iOS device installation requires Xcode/macOS and Apple signing; Linux verification can only check the Gradle shared metadata/JVM build and project files.
+
 The Android debug shell connects to the mock gateway at `http://10.0.2.2:8765` when run in an emulator. Start the local mock gateway first:
 
 ```bash
@@ -55,7 +72,7 @@ python3 -m uvicorn backend_plugin.hermes_mobile.server:app --host 127.0.0.1 --po
 
 If the gateway is unavailable, the app renders a sample approval fallback instead of a blank screen.
 
-Configure the mobile Gateway URL from the Android Settings tab. The URL is saved in Android `SharedPreferences` and can point at emulator, LAN, Tailscale, or VPS endpoints. Use `Test connection` before saving to probe `GET /mobile/v1/status` and show Online/Offline/Invalid feedback:
+Configure the mobile Gateway URL from the Android Settings tab. The URL is saved alongside the paired device id/token in Android encrypted shared preferences and can point at emulator, LAN, Tailscale, or VPS endpoints. Use `Test connection` before saving to probe `GET /mobile/v1/status` and show Online/Offline/Invalid feedback. Changing the Gateway URL clears the paired device token so a token is not reused against another host:
 
 ```text
 http://10.0.2.2:8765
@@ -82,10 +99,15 @@ Run the read-only Hermes state DB adapter against a local profile:
 HERMES_MOBILE_STATE_DB=$HOME/.hermes/state.db \
   python3 -m uvicorn backend_plugin.hermes_mobile.server:app --host 127.0.0.1 --port 8765
 
-curl http://127.0.0.1:8765/mobile/v1/sessions
+PAIR=$(curl -s -X POST http://127.0.0.1:8765/mobile/v1/pair/start)
+CODE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["code"])' <<<"$PAIR")
+curl -s -X POST http://127.0.0.1:8765/mobile/v1/pair/complete \
+  -H 'Content-Type: application/json' \
+  -d "{\"code\":\"$CODE\",\"device_name\":\"Ray Android\",\"platform\":\"android\"}"
+# Then call /mobile/v1/sessions with the token returned by pair/complete.
 ```
 
-This mode currently exposes real session summaries and timelines from `state.db`. Starting/appending real Hermes sessions and approval control remain mock-mode or future runtime integration work.
+This mode currently exposes real session summaries and timelines from `state.db` after pairing/auth. Starting/appending real Hermes sessions and approval control remain mock-mode or future runtime integration work.
 
 Run with the experimental live approval bridge enabled:
 

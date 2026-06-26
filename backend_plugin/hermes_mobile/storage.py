@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime
+from secrets import randbelow, token_urlsafe
 
 from .models import (
     Approval,
@@ -8,6 +11,11 @@ from .models import (
     Artifact,
     CronJob,
     CronRun,
+    DeviceInfo,
+    PairingCodeExpired,
+    PairingCompleteRequest,
+    PairingCompleteResponse,
+    PairingStartResponse,
     RiskLevel,
     SessionSummary,
     SessionTimeline,
@@ -16,6 +24,31 @@ from .models import (
     expires_in,
     now_utc,
 )
+
+
+@dataclass
+class PendingPairing:
+    pairing_id: str
+    code: str
+    expires_at: datetime
+
+
+@dataclass
+class DeviceRegistration:
+    device_id: str
+    device_token: str
+    device_name: str
+    platform: str
+    created_at: datetime
+
+
+@dataclass
+class ApprovalAuditEntry:
+    approval_id: str
+    device_id: str
+    decision: str
+    comment: str | None
+    created_at: datetime
 
 
 class MockMobileStore:
@@ -153,6 +186,91 @@ class MockMobileStore:
                 ],
             )
         }
+
+        self.pending_pairings: dict[str, PendingPairing] = {}
+        self.device_tokens: dict[str, DeviceRegistration] = {}
+        self.approval_audit_log: list[ApprovalAuditEntry] = []
+
+    def start_pairing(self) -> PairingStartResponse:
+        pairing_id = f"pair_{token_urlsafe(8)}"
+        code = f"{randbelow(1_000_000):06d}"
+        while code in self.pending_pairings:
+            code = f"{randbelow(1_000_000):06d}"
+        expires_at = expires_in(10)
+        self.pending_pairings[code] = PendingPairing(pairing_id=pairing_id, code=code, expires_at=expires_at)
+        return PairingStartResponse(
+            pairing_id=pairing_id,
+            code=code,
+            expires_at=expires_at,
+            qr_payload=f"hermes://pair?url=http://127.0.0.1:8765&code={code}&fingerprint=mock",
+        )
+
+    def complete_pairing(self, request: PairingCompleteRequest) -> PairingCompleteResponse | None:
+        pairing = self.pending_pairings.pop(request.code, None)
+        if not pairing:
+            return None
+        if pairing.expires_at <= now_utc():
+            raise PairingCodeExpired()
+        device_id = f"dev_{token_urlsafe(8)}"
+        device_token = f"hmob_{token_urlsafe(32)}"
+        self.device_tokens[device_token] = DeviceRegistration(
+            device_id=device_id,
+            device_token=device_token,
+            device_name=request.device_name,
+            platform=request.platform,
+            created_at=now_utc(),
+        )
+        return PairingCompleteResponse(
+            device_id=device_id,
+            device_token=device_token,
+            capabilities={
+                "approvals": True,
+                "sessions": True,
+                "cron": True,
+                "artifacts": True,
+                "events": True,
+            },
+        )
+
+    def device_id_for_token(self, token: str) -> str | None:
+        device = self.device_tokens.get(token)
+        return device.device_id if device else None
+
+    def device_token_for_id(self, device_id: str) -> str | None:
+        for token, device in self.device_tokens.items():
+            if device.device_id == device_id:
+                return token
+        return None
+
+    def list_devices(self) -> list[DeviceInfo]:
+        devices = sorted(self.device_tokens.values(), key=lambda device: device.created_at, reverse=True)
+        return [
+            DeviceInfo(
+                id=device.device_id,
+                name=device.device_name,
+                platform=device.platform,
+                created_at=device.created_at,
+            )
+            for device in devices
+        ]
+
+    def revoke_device(self, device_id: str) -> bool:
+        for token, device in list(self.device_tokens.items()):
+            if device.device_id == device_id:
+                del self.device_tokens[token]
+                return True
+        return False
+
+    def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
+        self.approval_audit_log.append(
+            ApprovalAuditEntry(
+                approval_id=approval_id,
+                device_id=device_id,
+                decision=decision.value,
+                comment=comment,
+                created_at=now_utc(),
+            )
+        )
 
     def list_artifacts(self, limit: int = 50) -> list[Artifact]:
         artifacts = sorted(self.artifacts.values(), key=lambda artifact: artifact.created_at, reverse=True)

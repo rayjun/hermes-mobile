@@ -55,6 +55,41 @@ class StatusResponse(BaseModel):
     features: dict[str, bool]
 
 
+class PairingStartResponse(BaseModel):
+    pairing_id: str
+    code: str
+    expires_at: datetime
+    qr_payload: str
+
+
+class PairingCompleteRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=12)
+    device_name: str = Field(min_length=1, max_length=120)
+    platform: Literal["android", "ios", "desktop", "unknown"] = "unknown"
+    public_key: str | None = None
+
+
+class PairingCompleteResponse(BaseModel):
+    device_id: str
+    device_token: str
+    capabilities: dict[str, bool]
+
+
+class DeviceInfo(BaseModel):
+    id: str
+    name: str
+    platform: str
+    created_at: datetime
+
+
+class DevicesResponse(BaseModel):
+    devices: list[DeviceInfo]
+
+
+class PairingCodeExpired(Exception):
+    pass
+
+
 class Artifact(BaseModel):
     id: str
     session_id: str | None = None

@@ -5,7 +5,7 @@ import importlib
 from datetime import UTC, datetime
 from typing import Any
 
-from .models import Approval, ApprovalStatus, Artifact, CronJob, RiskLevel, SessionSummary, SessionTimeline
+from .models import Approval, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, RiskLevel, SessionSummary, SessionTimeline
 
 
 class HermesApprovalBridge:
@@ -132,6 +132,27 @@ class LiveApprovalMobileStore:
 
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]:
         return self.base_store.list_sessions(limit=limit)
+
+    def start_pairing(self) -> PairingStartResponse:
+        return self.base_store.start_pairing()
+
+    def complete_pairing(self, request: PairingCompleteRequest) -> PairingCompleteResponse | None:
+        return self.base_store.complete_pairing(request)
+
+    def device_id_for_token(self, token: str) -> str | None:
+        return self.base_store.device_id_for_token(token)
+
+    def device_token_for_id(self, device_id: str) -> str | None:
+        return self.base_store.device_token_for_id(device_id)
+
+    def list_devices(self) -> list[DeviceInfo]:
+        return self.base_store.list_devices()
+
+    def revoke_device(self, device_id: str) -> bool:
+        return self.base_store.revoke_device(device_id)
+
+    def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
+        self.base_store.record_approval_audit(approval_id, device_id, decision, comment)
 
     def list_artifacts(self, limit: int = 50) -> list[Artifact]:
         return self.base_store.list_artifacts(limit=limit)
