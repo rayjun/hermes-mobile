@@ -6,6 +6,8 @@ from datetime import datetime
 from secrets import randbelow, token_urlsafe
 
 from .models import (
+    AgentInfo,
+    AgentRequest,
     Approval,
     ApprovalStatus,
     Artifact,
@@ -190,6 +192,18 @@ class MockMobileStore:
         self.pending_pairings: dict[str, PendingPairing] = {}
         self.device_tokens: dict[str, DeviceRegistration] = {}
         self.approval_audit_log: list[ApprovalAuditEntry] = []
+        self.agents: dict[str, AgentInfo] = {
+            "agent_vps": AgentInfo(
+                id="agent_vps",
+                name="VPS Hermes",
+                base_url="http://127.0.0.1:8765",
+                status="online",
+                profile="default",
+                model="gpt-5.5",
+                created_at=created_at,
+                last_seen_at=created_at,
+            )
+        }
 
     def start_pairing(self) -> PairingStartResponse:
         pairing_id = f"pair_{token_urlsafe(8)}"
@@ -260,6 +274,26 @@ class MockMobileStore:
                 del self.device_tokens[token]
                 return True
         return False
+
+    def list_agents(self) -> list[AgentInfo]:
+        return deepcopy(list(self.agents.values()))
+
+    def add_agent(self, request: AgentRequest) -> AgentInfo:
+        agent_id = f"agent_{token_urlsafe(8)}"
+        agent = AgentInfo(
+            id=agent_id,
+            name=request.name,
+            base_url=request.base_url.rstrip("/"),
+            status="offline",
+            created_at=now_utc(),
+        )
+        self.agents[agent_id] = agent
+        return deepcopy(agent)
+
+    def remove_agent(self, agent_id: str) -> bool:
+        if agent_id == "agent_vps":
+            return False
+        return self.agents.pop(agent_id, None) is not None
 
     def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
         self.approval_audit_log.append(

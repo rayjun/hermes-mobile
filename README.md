@@ -23,6 +23,7 @@ It is not a chatbot UI and not a mobile runtime for running agents on-device. Th
 - [`docs/mobile-product-spec.md`](docs/mobile-product-spec.md) — product scope, user flows, feature boundaries.
 - [`docs/mobile-api-contract.md`](docs/mobile-api-contract.md) — mobile gateway API and event schemas.
 - [`docs/mobile-ui-spec.md`](docs/mobile-ui-spec.md) — desktop-consistent mobile UI design system.
+- [`docs/server-installation.md`](docs/server-installation.md) — server-side Mobile Gateway installation and run modes.
 - [`docs/mvp-task-breakdown.md`](docs/mvp-task-breakdown.md) — implementation plan and milestones.
 
 ## Current Skeleton

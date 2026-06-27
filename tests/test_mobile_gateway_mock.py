@@ -233,6 +233,33 @@ def test_devices_endpoint_lists_paired_devices_without_tokens():
     assert "device_token" not in devices[0]
 
 
+def test_agents_endpoint_can_add_and_remove_managed_agents():
+    client = TestClient(create_app())
+    headers = auth_headers(client)
+
+    initial = client.get("/mobile/v1/agents", headers=headers)
+    assert initial.status_code == 200
+    assert initial.json()["agents"][0]["name"] == "VPS Hermes"
+
+    created = client.post(
+        "/mobile/v1/agents",
+        headers=headers,
+        json={"name": "Local Hermes", "base_url": "http://127.0.0.1:8766"},
+    )
+    assert created.status_code == 200
+    body = created.json()
+    assert body["name"] == "Local Hermes"
+    assert body["status"] == "offline"
+
+    listed = client.get("/mobile/v1/agents", headers=headers).json()["agents"]
+    assert [agent["name"] for agent in listed] == ["VPS Hermes", "Local Hermes"]
+
+    deleted = client.delete(f"/mobile/v1/agents/{body['id']}", headers=headers)
+    assert deleted.status_code == 204
+    listed_after_delete = client.get("/mobile/v1/agents", headers=headers).json()["agents"]
+    assert [agent["name"] for agent in listed_after_delete] == ["VPS Hermes"]
+
+
 def test_revoke_device_invalidates_its_bearer_token():
     client = TestClient(create_app())
     headers = auth_headers(client)

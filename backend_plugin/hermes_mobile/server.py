@@ -11,7 +11,7 @@ from typing import Optional, Protocol
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket
 
 from .live_approvals import LiveApprovalMobileStore
-from .models import Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, DevicesResponse, GoalRequest, GoalResponse, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, SessionSummary, SessionTimeline, StatusResponse
+from .models import AgentInfo, AgentRequest, AgentsResponse, Approval, ApprovalDecision, ApprovalStatus, Artifact, CronJob, DeviceInfo, DevicesResponse, GoalRequest, GoalResponse, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, SessionSummary, SessionTimeline, StatusResponse
 from .real_store import StateDbMobileStore
 from .storage import MockMobileStore
 
@@ -23,6 +23,9 @@ class MobileStore(Protocol):
     def device_token_for_id(self, device_id: str) -> str | None: ...
     def list_devices(self) -> list[DeviceInfo]: ...
     def revoke_device(self, device_id: str) -> bool: ...
+    def list_agents(self) -> list[AgentInfo]: ...
+    def add_agent(self, request: AgentRequest) -> AgentInfo: ...
+    def remove_agent(self, agent_id: str) -> bool: ...
     def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None: ...
     def list_sessions(self, limit: int = 50) -> list[SessionSummary]: ...
     def list_artifacts(self, limit: int = 50) -> list[Artifact]: ...
@@ -75,6 +78,7 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
                 "cron": True,
                 "artifacts": True,
                 "push_relay": False,
+                "agents": True,
             },
         )
 
@@ -141,6 +145,20 @@ def create_app(store: MobileStore | None = None) -> FastAPI:
     def revoke_device(device_id: str, requester_device_id: str = Depends(require_device)) -> Response:
         if not store.revoke_device(device_id):
             raise HTTPException(status_code=404, detail="device_not_found")
+        return Response(status_code=204)
+
+    @app.get("/mobile/v1/agents", response_model=AgentsResponse)
+    def list_agents(device_id: str = Depends(require_device)) -> AgentsResponse:
+        return AgentsResponse(agents=store.list_agents())
+
+    @app.post("/mobile/v1/agents", response_model=AgentInfo)
+    def add_agent(request: AgentRequest, device_id: str = Depends(require_device)) -> AgentInfo:
+        return store.add_agent(request)
+
+    @app.delete("/mobile/v1/agents/{agent_id}", status_code=204)
+    def remove_agent(agent_id: str, device_id: str = Depends(require_device)) -> Response:
+        if not store.remove_agent(agent_id):
+            raise HTTPException(status_code=404, detail="agent_not_found")
         return Response(status_code=204)
 
     @app.get("/mobile/v1/approvals")

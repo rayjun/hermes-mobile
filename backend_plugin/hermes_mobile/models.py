@@ -86,6 +86,26 @@ class DevicesResponse(BaseModel):
     devices: list[DeviceInfo]
 
 
+class AgentInfo(BaseModel):
+    id: str
+    name: str
+    base_url: str
+    status: Literal["online", "offline"]
+    profile: str = "default"
+    model: str = "unknown"
+    created_at: datetime
+    last_seen_at: datetime | None = None
+
+
+class AgentRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    base_url: str = Field(min_length=1, max_length=500)
+
+
+class AgentsResponse(BaseModel):
+    agents: list[AgentInfo]
+
+
 class PairingCodeExpired(Exception):
     pass
 

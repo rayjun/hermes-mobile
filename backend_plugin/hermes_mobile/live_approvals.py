@@ -5,7 +5,7 @@ import importlib
 from datetime import UTC, datetime
 from typing import Any
 
-from .models import Approval, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, RiskLevel, SessionSummary, SessionTimeline
+from .models import AgentInfo, AgentRequest, Approval, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, RiskLevel, SessionSummary, SessionTimeline
 
 
 class HermesApprovalBridge:
@@ -150,6 +150,15 @@ class LiveApprovalMobileStore:
 
     def revoke_device(self, device_id: str) -> bool:
         return self.base_store.revoke_device(device_id)
+
+    def list_agents(self) -> list[AgentInfo]:
+        return self.base_store.list_agents()
+
+    def add_agent(self, request: AgentRequest) -> AgentInfo:
+        return self.base_store.add_agent(request)
+
+    def remove_agent(self, agent_id: str) -> bool:
+        return self.base_store.remove_agent(agent_id)
 
     def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
         self.base_store.record_approval_audit(approval_id, device_id, decision, comment)

@@ -7,15 +7,30 @@ from pathlib import Path
 from secrets import randbelow, token_urlsafe
 from typing import Any
 
-from .models import Approval, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, SessionSummary, SessionTimeline, TimelineItem, ToolCall, expires_in
+from .models import AgentInfo, AgentRequest, Approval, ApprovalStatus, Artifact, CronJob, DeviceInfo, PairingCodeExpired, PairingCompleteRequest, PairingCompleteResponse, PairingStartResponse, SessionSummary, SessionTimeline, TimelineItem, ToolCall, expires_in
 
 
 class StateDbMobileStore:
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, agents_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path)
+        self.agents_path = Path(agents_path) if agents_path else Path.home() / ".hermes" / "mobile_agents.json"
         self.pending_pairings: dict[str, PairingStartResponse] = {}
         self.device_tokens: dict[str, DeviceInfo] = {}
         self.approval_audit_log: list[dict[str, object]] = []
+        now = datetime.now(UTC)
+        self.agents: dict[str, AgentInfo] = {
+            "agent_vps": AgentInfo(
+                id="agent_vps",
+                name="VPS Hermes",
+                base_url="http://127.0.0.1:8765",
+                status="online",
+                profile="default",
+                model="gpt-5.5",
+                created_at=now,
+                last_seen_at=now,
+            )
+        }
+        self._load_agents()
 
     def start_pairing(self) -> PairingStartResponse:
         pairing_id = f"pair_{token_urlsafe(8)}"
@@ -76,6 +91,50 @@ class StateDbMobileStore:
                 del self.device_tokens[token]
                 return True
         return False
+
+    def list_agents(self) -> list[AgentInfo]:
+        return list(self.agents.values())
+
+    def add_agent(self, request: AgentRequest) -> AgentInfo:
+        agent_id = f"agent_{token_urlsafe(8)}"
+        agent = AgentInfo(
+            id=agent_id,
+            name=request.name,
+            base_url=request.base_url.rstrip("/"),
+            status="offline",
+            created_at=datetime.now(UTC),
+        )
+        self.agents[agent_id] = agent
+        self._persist_agents()
+        return agent
+
+    def remove_agent(self, agent_id: str) -> bool:
+        if agent_id == "agent_vps":
+            return False
+        removed = self.agents.pop(agent_id, None) is not None
+        if removed:
+            self._persist_agents()
+        return removed
+
+    def _load_agents(self) -> None:
+        if not self.agents_path.exists():
+            return
+        try:
+            data = json.loads(self.agents_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        for item in data.get("agents", []):
+            try:
+                agent = AgentInfo.model_validate(item)
+            except Exception:
+                continue
+            if agent.id != "agent_vps":
+                self.agents[agent.id] = agent
+
+    def _persist_agents(self) -> None:
+        self.agents_path.parent.mkdir(parents=True, exist_ok=True)
+        managed = [agent.model_dump(mode="json") for agent in self.agents.values() if agent.id != "agent_vps"]
+        self.agents_path.write_text(json.dumps({"agents": managed}, indent=2, ensure_ascii=False))
 
     def record_approval_audit(self, approval_id: str, device_id: str, decision: ApprovalStatus, comment: str | None) -> None:
         self.approval_audit_log.append(
@@ -148,7 +207,41 @@ class StateDbMobileStore:
         raise NotImplementedError("Starting real Hermes sessions is not wired yet")
 
     def append_goal(self, session_id: str, goal: str) -> tuple[SessionSummary, SessionTimeline] | None:
-        raise NotImplementedError("Appending to real Hermes sessions is not wired yet")
+        now = datetime.now(UTC).timestamp()
+        with self._connect() as con:
+            session = con.execute(
+                "SELECT id FROM sessions WHERE id = ? AND archived = 0",
+                (session_id,),
+            ).fetchone()
+            if not session:
+                return None
+            con.execute(
+                """
+                INSERT INTO messages(session_id, role, content, timestamp, active, compacted)
+                VALUES (?, 'user', ?, ?, 1, 0)
+                """,
+                (session_id, goal, now),
+            )
+            con.execute(
+                """
+                UPDATE sessions
+                SET ended_at = NULL,
+                    end_reason = NULL,
+                    message_count = COALESCE(message_count, 0) + 1
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            con.commit()
+        timeline = self.get_timeline(session_id)
+        if not timeline:
+            return None
+        with self._connect() as con:
+            row = con.execute(
+                "SELECT id, title, started_at, ended_at FROM sessions WHERE id = ? AND archived = 0",
+                (session_id,),
+            ).fetchone()
+        return self._session_summary(row), timeline
 
     def _connect(self) -> sqlite3.Connection:
         con = sqlite3.connect(self.db_path)
